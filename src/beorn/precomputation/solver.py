@@ -21,7 +21,7 @@ from ..structs.radiation_profiles import RadiationProfiles, RadiationProfilesFSt
 from .. import constants
 # TODO: replace these unit conversions by astropy units
 from ..constants import m_p_in_Msun, km_per_Mpc, h_eV_sec, cm_per_Mpc, E_HI, E_HeI, kb_eV_per_K, rhoc0
-from ..astro import f_Xh, f_star_Halo, eps_xray
+from ..astro import f_Xh, f_star_Halo, eps_xray,eps_xray_BH
 from .helpers import Ngdot_ion, rho_alpha_profile, cum_optical_depth
 from .massaccretion import mass_accretion
 from copy import deepcopy
@@ -470,10 +470,20 @@ class RadiationProfileSolver:
                 eps_X = eps_xray(nu_prime, self.parameters)
                 # eps_X has a redshift component and the nu component (2d)
 
+                #Get eps_X for both HMXB and IMBH
+                eps_X_BH = eps_xray_BH(nu_prime, self.parameters,0,"IMBH")
+                eps_X_XB = eps_xray_BH(nu_prime, self.parameters,0,"HMXB")
+
+                #the total x ray luminosity is:
+                L_tot = eps_X_XB*f_star_Halo(self.parameters, self.halo_mass_evolution)*self.halo_mass_derivative 
+                L_tot += eps_X_BH
+
                 # complication - the integrand is expressed in terms of the radial distance
                 # we perform a hack to interpret eps(z) as a function of r
                 # the mass also had an M0, alpha dependence, so we the missing axis
                 integral_factors = (np.exp(- tau_prime) * eps_X)[:,  None, None, :] * dMdt_int(z_prime)[None, ...]
+                integral_factors_BH =(np.exp(-tau_prime))[:,None,None,:]
+                
                 integral_factors_interpolated = interp1d(rcom_prime, integral_factors, axis=-1, fill_value=0.0, bounds_error=False)
                 # but r should be the first axis after nu: 0, 1, 2, 3 -> 0, 3, 1, 2
                 integral_factors_r = integral_factors_interpolated(rr)

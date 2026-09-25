@@ -9,7 +9,7 @@ convenience helpers.
 """
 import numpy as np
 from .structs import Parameters
-from .constants import h_eV_sec, eV_per_erg
+from .constants import h_eV_sec, eV_per_erg,h__
 
 
 def S_fct(Mh, Mt, g3, g4):
@@ -122,3 +122,42 @@ def eps_xray(nu_, parameters: Parameters):
     # param.source.cX * eV_per_erg * norm_xray * nu_ ** (-sed_xray) * Hz_per_eV   # [eV/eV/s/SFR]
 
     return parameters.source.xray_normalisation / parameters.cosmology.h0 * eV_per_erg * norm_xray * nu_ ** (-sed_xray) /(nu_*h_eV_sec)   # [photons/Hz/s/SFR]
+
+def eps_xray_BH(nu_, parameters: Parameters,Mdot_BH,type):
+    """Spectral distribution of X-ray emission per unit BH accretion.
+    Args:
+        nu_ (float or array): Photon frequency in Hz.
+        parameters (Parameters): Model parameters container.
+
+    Returns:
+        float or array: Spectral photon emission rate per unit BH accretion.
+
+    Notes:
+        The implementation follows Eq. 15 and 16 of Felix's Thesis
+    """
+    #Hard coded parameters:
+    k1 = -0.026
+    k2 = 0.278
+    c1 = 5.712
+    c2 = 17.67
+    beta = 0.24
+    psi4375 = 0.73
+    psi_min = 0.2
+    psi_max = 0.84
+    f_X = 1
+    c_X = 3.4e40 #[erg/s yr/M_sun]
+    e_r = 0.1 #radiative efficiency
+    al_IMBH = 1.5 #spectral index for IMBH
+    al_HMXB = 1.0 #spectral index for HMXB
+    #calculate the obscured fraction of the AGN
+    def obsc_fraction(L_X):
+        return min(psi_max,max(psi_min,psi4375-beta*(np.log10(L_X)-43.75)))
+    if type == "HMXB":
+        return f_X*c_X/(h__*nu_) * nu_**(-al_HMXB)
+    elif type == "IMBH":
+        L_bol = e_r*Mdot_BH*3e8**2
+        K_X = c1*(L_bol/1e10)**k1 + c2*(L_bol/1e10)**k2
+        L_X = L_bol/K_X
+        psi = obsc_fraction(L_X)
+        return (e_r*3e8**2)/K_X * (1-psi) * nu_**(-al_IMBH)
+        

@@ -151,7 +151,7 @@ def plot_1D_profiles(parameters: Parameters, profiles: RadiationProfiles | Radia
 
     # Style the MAR panel
     ax_mar.set_xlim(15, 5)
-    ax_mar.set_ylim(1.5e8, 8e12)
+    ax_mar.set_ylim(1.5e8, 8e11)
     ax_mar.set_xlabel('z', **label_kw)
     ax_mar.set_ylabel(r'$M_h$ [$M_{\odot}$]', **label_kw)
     ax_mar.tick_params(axis='both', **tick_kw)
