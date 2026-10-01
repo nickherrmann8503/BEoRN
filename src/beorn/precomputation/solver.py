@@ -473,16 +473,17 @@ class RadiationProfileSolver:
                 #Get eps_X for both HMXB and IMBH
                 eps_X_BH = eps_xray_BH(nu_prime, self.parameters,0,"IMBH")
                 eps_X_XB = eps_xray_BH(nu_prime, self.parameters,0,"HMXB")
-
+                
                 #the total x ray luminosity is:
-                L_tot = eps_X_XB*f_star_Halo(self.parameters, self.halo_mass_evolution)*self.halo_mass_derivative 
-                L_tot += eps_X_BH
+                L_tot = eps_X_XB[:,None,None,:] * dMdt_int(z_prime)[None,...]#includes f_star
+                L_tot += eps_X_BH[:,None,None,:]
 
                 # complication - the integrand is expressed in terms of the radial distance
                 # we perform a hack to interpret eps(z) as a function of r
                 # the mass also had an M0, alpha dependence, so we the missing axis
                 integral_factors = (np.exp(- tau_prime) * eps_X)[:,  None, None, :] * dMdt_int(z_prime)[None, ...]
-                integral_factors_BH =(np.exp(-tau_prime))[:,None,None,:]
+                integral_factors_BH =(np.exp(-tau_prime))[:,None,None,:] *L_tot
+                integral_factors = integral_factors + integral_factors_BH
                 
                 integral_factors_interpolated = interp1d(rcom_prime, integral_factors, axis=-1, fill_value=0.0, bounds_error=False)
                 # but r should be the first axis after nu: 0, 1, 2, 3 -> 0, 3, 1, 2

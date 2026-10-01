@@ -156,7 +156,9 @@ def eps_xray_BH(nu_, parameters: Parameters,Mdot_BH,type):
         return f_X*c_X/(h__*nu_) * nu_**(-al_HMXB)
     elif type == "IMBH":
         L_bol = e_r*Mdot_BH*3e8**2
-        K_X = c1*(L_bol/1e10)**k1 + c2*(L_bol/1e10)**k2
+        K_X = 1.0
+        if L_bol > 0.0:
+            K_X = c1*(L_bol/1e10)**k1 + c2*(L_bol/1e10)**k2
         L_X = L_bol/K_X
         psi = obsc_fraction(L_X)
         return (e_r*3e8**2)/K_X * (1-psi) * nu_**(-al_IMBH)
