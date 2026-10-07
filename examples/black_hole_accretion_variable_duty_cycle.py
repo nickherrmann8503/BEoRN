@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 from matplotlib.ticker import LogLocator
 from scipy.optimize import fsolve,minimize,brentq, minimize_scalar,newton
 from scipy.optimize.elementwise import find_root
@@ -46,8 +47,8 @@ A = 2*1e-8 #[/yr]
 #print(0.1*0.9*4*np.pi*6.67*1e-11*1.67*1e-27/(0.1*3e8*6.652*1e-29)*365.25*24*3600)
 eta = 1e-6
 
-Nint = 50
-Nz = 50
+Nint = 41
+Nz = 100
 cosmo = FlatLambdaCDM(H0=67.3, Om0=Om)
 
 #Simulation parameters
@@ -68,6 +69,7 @@ loader = beorn.load_input_data.ArtificialHaloLoader(
     halo_count = 100,
 )
 Mh_0 = np.logspace(9,13,Nint) #evenly distributed halo masses for testing purposes
+print(Mh_0)
 rng = np.random.default_rng()
 #Mh_0 = rng.choice(Mh_0,size=Nint,replace=True)
 
@@ -141,29 +143,33 @@ def z_seed(M0,M_seed):
 def z_seed(M0,M_seed):
     funct = lambda z: stellar_seed_mass_eq(z,M0,M_seed)
     guess = (23-6)/np.log10(1e16/M0/3)*1.2+6#quick_guess(M0)
-    z_seed_solution = brentq(funct, 5, 30)
+    z_seed_solution = brentq(funct, 4, 30)
     return z_seed_solution
 
 def dN_dzdMp(Mh,Mp,z):
     #Compute the number of mergers per unit redshift and per unit progenitor mass
-    alpha,beta,gamma,eta = 0.133,-1.995,0.263,0.0993
+    alpha,beta,gamma,eta = 0.133,-1.995,0.263,0.0993*0
     A,xi = 0.0104,9.72e-3
     #no M_h present in draft but not in cited paper
-    return A*(Mh/1e12)**alpha*(Mp/Mh)**beta*np.exp((Mp/(Mh*xi))**gamma)*(1+z)**eta
+    return A*(Mh/1e12)**alpha*(Mp/Mh)**beta*np.exp((Mp/(Mh*xi))**gamma)
 
 def p_merge(Mh,Mp,xi,p):
     #print(Mp/Mh)
+    #return 1.0
     if Mp/Mh >xi:
         return p
     else:
         return 0.0
 
-def display_bins(M_BH,Mh,zn,Mseed,f0,p):
+def display_bins(M_BH,Mh,zn,Mseed,f0,p,xi,title):
     x_edges = zn   # len = ncols + 1
-    y_edges = np.log10(Mh)  # len = nrows + 1
-    plt.pcolormesh(x_edges, y_edges, M_BH, cmap='viridis')
-    plt.colorbar()
-    plt.title(f"M_seed = {Mseed:.2e},f0 = {f0} and p={p} in {len(zn)} z bins and {len(Mh)} Mh bins")
+    y_edges = Mh  # len = nrows + 1
+    plt.pcolormesh(x_edges, y_edges, M_BH, cmap='viridis',norm=LogNorm())
+    plt.colorbar(label=title)
+    plt.xlabel("z")
+    plt.ylabel(r"$M_h$")
+    plt.yscale("log")
+    plt.title(rf"$M_{{seed}}$={Mseed},f={f0},p={p},$\xi$={xi}in {len(zn)} z bins and {len(Mh)} Mh bins")
     plt.show()
 
 def black_hole_mass_iterative(Mh0,Mseed,f0,p,xi):
@@ -203,25 +209,24 @@ def black_hole_mass_iterative(Mh0,Mseed,f0,p,xi):
     index = [0,0,0]
     for n in range(1,len(zn)):
         for l in range(len(Mh)-1,-1,-1):
+
+            M_BH[l][n] += M_BH[l][n-1]
+            
             #eddington accretion from the previous z bin
             gas_accr = A*duty_cycle(M_BH[l][n-1],f0,0)*M_BH[l][n-1]*dtdz(zn[n])
-            #print(f"gas_accr({l},{n}):",gas_accr)
-            M_BH[l][n] += M_BH[l][n-1]
+
             mergers = 0.0
             for i in range(len(Mh)-1,l,-1):
                 
                 mergers +=  np.abs((Mh[i]-Mh[i-1]))/Mh[l]*dN_dzdMp(Mh[l],Mh[i],zn[n]) * M_BH[i][n] * p_merge(Mh[l],Mh[i],xi,p)
-                #print(Mh[i]-Mh[i+1])
-                #print(f"dN([{l}][{n}][{i}]):",dN_dzdMp(M_BH[l][n],M_BH[i][n],zn[n]))
-                #print("pmerge:", p_merge(Mh[i],Mh[l],0.1,1.0))
-                #print("mass: ", M_BH[i][n])
-                #print(np.abs((Mh[i]-Mh[i-1]))/Mh[l])
-            #print(f"{Mh[l]:.2e}")
             
-            if np.isnan(mergers):
-                break
+            #add both contributions
             delta_M = gas_accr+ mergers
+
+            #add them times the redshift step
             M_BH[l][n] += delta_M * Dz
+
+            #change
             M_mergers[l][n] += mergers * Dz
             M_accr[l][n] += gas_accr * Dz
             M_BH_dot[l][n] += delta_M * dzdt(zn[n])
@@ -229,13 +234,12 @@ def black_hole_mass_iterative(Mh0,Mseed,f0,p,xi):
             #display_bins(np.log10(M_BH),Mh,zn)
         #display_bins(np.log10(M_BH),Mh,zn,f0)
         #display_bins(DNDMDZ,Mh,zn)
-        if np.isnan(mergers):
-            break
+        
     
     
-    #display_bins(np.log10(M_BH),Mh,zn,Mseed,f0,p)
-    #display_bins(np.log10(M_mergers),Mh,zn,f0)
-    #display_bins(np.log10(M_accr),Mh,zn,f0)
+    #display_bins(M_BH,Mh,zn,Mseed,f0,p,xi,r"$M_{BH}$")
+    #display_bins(M_mergers,Mh,zn,Mseed,f0,p,xi,r"$M_{mergers}$")
+    #display_bins(M_accr,Mh,zn,Mseed,f0,p,xi,r"$M_{eddington}$")
     return M_BH,M_BH_dot,Mh,z_0
 
 def black_hole_mass(z,M0,f,eta,Mseed,zseed):
@@ -291,8 +295,8 @@ def plot_evolution(BH_evolution,index):
 
 ms = np.logspace(7,13,20)
 zs = np.linspace(5,20,Nint)
-"""
-plt.plot(zs,Ob/Om*f_star_Halo(parameters,mass_accretion(parameters,zs,np.array([1e11/h]),np.array([0.785]))[0]).squeeze())
+
+"""plt.plot(zs,Ob/Om*f_star_Halo(parameters,mass_accretion(parameters,zs,np.array([1e11/h]),np.array([0.785]))[0]).squeeze())
 plt.plot(zs,fstar(mass_accretion(parameters,zs,np.array([1e11/h]),np.array([0.785]))[0].squeeze()))
 plt.show()
 plt.plot(ms,Ob/Om*f_star_Halo(parameters,ms/h))
@@ -361,13 +365,13 @@ def plot_contributions(evolution,index,f):
 
 def Parameter_comparison(Mh_0):
     fig, axes = plt.subplots(2, 4, figsize=(14, 10),layout="constrained")
-    fig.suptitle(f"Descendant halo mass:{Mh_0[-1]:.2e} M_\odot")
+    fig.suptitle(rf"Iterative BH evolution in a halo of descendant mass:$10^{{{int(np.log10(Mh_0[-1]))}}}M_\odot$")
     z_low,z_high = 5,27
     for ax_mass in axes[0]:
         
         ax_mass.set_ylabel(r"$M_{BH} [M_\odot/h]$")
         ax_mass.set_xlabel("z")
-        ax_mass.set_xticks([7.5, 10, 12.5, 15, 17.5, 20,22.5,25])
+        ax_mass.set_xticks([5, 10, 15,  20,25])
         ax_mass.set_yscale("log")
         ax_mass.set_xlim((z_low,z_high))
         ax_mass.set_ylim((1e1,1e9))
@@ -378,104 +382,109 @@ def Parameter_comparison(Mh_0):
             
         ax_dot.set_ylabel(r"$\dot{M}_{BH} [M_\odot/yr/h]$")
         ax_dot.set_xlabel("z")
-        ax_dot.set_xticks([7.5, 10, 12.5, 15, 17.5, 20,22.5,25])
+        ax_dot.set_xticks([5,10,15,20,25])
         ax_dot.set_yscale("log")
         ax_dot.set_xlim((z_low,z_high))
         ax_dot.set_ylim((1e-7,1e-1))
         ax_dot.yaxis.set_major_locator(LogLocator(base=10, numticks=100))  # every decade
         ax_dot.grid(True, which="major", linestyle="--", alpha=0.5)
 
-    fs = [0.0,0.1,0.3,0.5]
+    fs = [0.0,0.1,0.2,0.3]
     Mseeds = [50,100,300,800]
-    ps = [0.01,0.1,0.3,1.0]
-    xis = [0.0,0.01,0.1,0.5]
+    ps = [0.0,0.1,0.3,1.0]
+    xis = [0.3,0.5,0.7,0.9]
     Evolution = [[0 for i in range(4)] for j in range(4)]
     for i in range(len(fs)):
-        Evolution[0][i] = black_hole_mass_iterative(Mh_0,Mseeds[1],fs[i],ps[1],xis[2])
-        Evolution[1][i] = black_hole_mass_iterative(Mh_0,Mseeds[i],fs[1],ps[1],xis[2])
-        Evolution[2][i] = black_hole_mass_iterative(Mh_0,Mseeds[1],fs[1],ps[i],xis[2])
-        Evolution[3][i] = black_hole_mass_iterative(Mh_0,Mseeds[1],fs[1],ps[1],xis[i])
+        Evolution[0][i] = black_hole_mass_iterative(Mh_0,Mseeds[1],fs[i],ps[2],xis[1])
+        Evolution[1][i] = black_hole_mass_iterative(Mh_0,Mseeds[i],fs[1],ps[2],xis[1])
+        Evolution[2][i] = black_hole_mass_iterative(Mh_0,Mseeds[1],fs[1],ps[i],xis[1])
+        Evolution[3][i] = black_hole_mass_iterative(Mh_0,Mseeds[1],fs[1],ps[2],xis[i])
         
 
     #plot f dependence
     for f in range(len(fs)):
         zs = np.linspace(Evolution[0][f][3],5,Nz)
-        axes[0][0].plot(zs,Evolution[0][f][0][0],label = f"f={fs[f]:.2f}")
+        axes[0][0].plot(zs,Evolution[0][f][0][0],label = f"f={fs[f]:.1f}")
     axes[0][0].legend()
-    axes[0][0].set_title(r"$M_{seed}=100M_\odot,p=0.1,xi= 0.1$")
+    axes[0][0].set_title(r"$M_{seed}=100M_\odot,p=0.3,\xi= 0.5$")
 
     #plot Mseed dependence
     for m in range(len(Mseeds)):
         zs = np.linspace(Evolution[1][m][3],5,Nz)
-        axes[0][1].plot(zs,Evolution[1][m][0][0],label = f"M_seed={Mseeds[m]:.2f}")
+        axes[0][1].plot(zs,Evolution[1][m][0][0],label = rf"M_seed={Mseeds[m]}$M_\odot$")
     axes[0][1].legend()
-    axes[0][1].set_title(r"$f = 0.1,p=0.1,xi= 0.1$")
+    axes[0][1].set_title(r"$f = 0.1,p=0.3,\xi= 0.5$")
 
     #plot p dependence
     for p in range(len(Mseeds)):
         zs = np.linspace(Evolution[2][p][3],5,Nz)
-        axes[0][2].plot(zs,Evolution[2][p][0][0],label = f"p={ps[p]:.2f}")
+        axes[0][2].plot(zs,Evolution[2][p][0][0],label = f"p={ps[p]:.1f}")
     axes[0][2].legend()
-    axes[0][2].set_title(r"$f = 0.1,M_{seed} = 100M_\odot,xi = 0.1$")
+    axes[0][2].set_title(r"$f = 0.1,M_{seed} = 100M_\odot,\xi = 0.5$")
 
     #plot xi dependence
     for xi in range(len(Mseeds)):
         zs = np.linspace(Evolution[3][xi][3],5,Nz)
-        axes[0][3].plot(zs,Evolution[3][xi][0][0],label = f"xi={xis[xi]:.2f}")
+        axes[0][3].plot(zs,Evolution[3][xi][0][0],label = f"xi={xis[xi]:.1f}")
     axes[0][3].legend()
-    axes[0][3].set_title(r"$f = 0.1,M_{seed} = 100M_\odot,p= 0.1$")
+    axes[0][3].set_title(r"$f = 0.1,M_{seed} = 100M_\odot,p= 0.3$")
 
     #M DOT
     #plot f dependence
     for f in range(len(fs)):
         zs = np.linspace(Evolution[0][f][3],5,Nz)
-        axes[1][0].plot(zs,Evolution[0][f][1][0],label = f"f={fs[f]:.2f}")
+        axes[1][0].plot(zs,Evolution[0][f][1][0],label = f"f={fs[f]:.1f}")
     axes[1][0].legend()
-    axes[1][0].set_title(r"$M_{seed}=100M_\odot,p=0.1,xi= 0.1$")
+    axes[1][0].set_title(r"$M_{seed}=100M_\odot,p=0.3,\xi= 0.5$")
 
     #plot Mseed dependence
     for m in range(len(Mseeds)):
         zs = np.linspace(Evolution[1][m][3],5,Nz)
-        axes[1][1].plot(zs,Evolution[1][m][1][0],label = f"M_seed={Mseeds[m]:.2f}")
+        axes[1][1].plot(zs,Evolution[1][m][1][0],label = rf"M_seed={Mseeds[m]}$M_\odot$")
     axes[1][1].legend()
-    axes[1][1].set_title(r"$f = 0.1,p=0.1,xi= 0.1$")
+    axes[1][1].set_title(r"$f = 0.1,p=0.3,\xi= 0.5$")
 
     #plot p dependence
     for p in range(len(Mseeds)):
         zs = np.linspace(Evolution[2][p][3],5,Nz)
-        axes[1][2].plot(zs,Evolution[2][p][1][0],label = f"p={ps[p]:.2f}")
+        axes[1][2].plot(zs,Evolution[2][p][1][0],label = f"p={ps[p]:.1f}")
     axes[1][2].legend()
-    axes[1][2].set_title(r"$f = 0.1,M_{seed} = 100M_\odot,xi = 0.1$")
+    axes[1][2].set_title(r"$f = 0.1,M_{seed} = 100M_\odot,\xi = 0.5$")
 
     #plot xi dependence
     for xi in range(len(Mseeds)):
         zs = np.linspace(Evolution[3][xi][3],5,Nz)
-        axes[1][3].plot(zs,Evolution[3][xi][1][0],label = f"xi={xis[xi]:.2f}")
+        axes[1][3].plot(zs,Evolution[3][xi][1][0],label = f"xi={xis[xi]:.1f}")
     axes[1][3].legend()
-    axes[1][3].set_title(r"$f = 0.1,M_{seed} = 100M_\odot,p= 0.1$")
+    axes[1][3].set_title(r"$f = 0.1,M_{seed} = 100M_\odot,p= 0.3$")
 
     plt.show()
 
     #felix evolution plots
     fig, axes = plt.subplots(2, 5, figsize=(14, 10),layout="constrained")
-    fig.suptitle(f"Evolution of M_BH for differen M0")
+    fig.suptitle(f"Iterative BH Evolution for different descendant halo masses"+r"$(M_{seed} = 100M_\odot,p=0.3,\xi=0.5)$")
     z_low,z_high = 5,27
     zs = np.linspace(Evolution[0][1][3],5,Nz)
     Mh_0 = Mh_0[::-1]
     for m in range(5):
         for f in range(4):
             
-            axes[0][m].plot(zs,Evolution[0][f][0][m*Nint//5],label = f"f0 = {fs[f]}" )
-            axes[0][m].set_title(f"{Mh_0[m*Nint//5]:.2e}")
-            axes[1][m].plot(zs,Evolution[0][f][1][m*Nint//5],label = f"f0 = {fs[f]}")
+            axes[0][m].plot(zs,Evolution[0][f][0][m*10],label = f"f0 = {fs[f]}" )
+            axes[0][m].set_title(rf"$M_h=10^{{{int(np.log10(Mh_0[m*10]))}}}M_\odot$")
+            axes[1][m].plot(zs,Evolution[0][f][1][m*10],label = f"f0 = {fs[f]}")
             axes[0][m].set_yscale("log")
             axes[1][m].set_yscale("log")
+            axes[0][m].set_xlabel("z")
+            axes[0][m].set_ylabel(r"$M_{BH} [M_\odot/h]$")
+            axes[1][m].set_xlabel("z")
+            axes[1][m].set_ylabel(r"$\dot{M}_{BH} [M_\odot/yr/h]$")
             axes[0][m].set_ylim((1e1,1e8))
             axes[1][m].set_ylim(1e-9,1e-1)
     axes[0][0].legend()
     Mh_0 = Mh_0[::-1]
     plt.show()
 
+black_hole_mass_iterative(Mh_0,100,0.1,0.3,0.5)
 
 print(z_seed(1e11,100))
 Parameter_comparison(Mh_0)

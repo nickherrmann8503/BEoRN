@@ -1,4 +1,5 @@
 #Compute Radial profiles
+import time
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -83,7 +84,7 @@ parameters.source.Nion    = 15000
 parameters.source.f0_esc  = 0.2
 parameters.source.pl_esc  = 0
 
-
+start_time = time.time()
 #Artificial halo catalog
 cache_handler = beorn.io.Handler(CACHE_ROOT)
 loader = beorn.load_input_data.ArtificialHaloLoader(
@@ -114,4 +115,5 @@ beorn.plotting.radiation_profiles.plot_1D_profiles(
     fontsize=15,
 )
 
+print(f"Total time taken: {time.time() - start_time:.2f} seconds")
 plt.show()

@@ -92,7 +92,7 @@ def mass_accretion_BH(parameters: Parameters, z_bins: np.ndarray, m_bins: np.nda
     halo_mass = m_bins[:, None, None] * np.exp(alpha_bins[None, :, None] * (z_initial - z_bins[None, None, :]))
     halo_mass_derivative = mass_accretion_derivative(parameters, halo_mass, z_bins, m_bins, alpha_bins)
 
-
+    
     BH_mass = M_seed * np.exp(A * (z_initial - z_bins[None, None, :]))
     BH_mass += eta*np.exp(A*f*z_bins[None, None, :])
     return halo_mass, halo_mass_derivative

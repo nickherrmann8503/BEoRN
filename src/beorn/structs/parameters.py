@@ -162,7 +162,7 @@ class SolverParameters:
     """
     Solver parameters for the simulation.
     """
-    redshifts: np.ndarray = field(default_factory=lambda: np.arange(25, 6, -0.5))
+    redshifts: np.ndarray = field(default_factory=lambda: np.arange(25, 5, -0.5))
     """High-resolution redshift grid used by the 1D RT profile solver.
     Should span the full redshift range of interest at fine enough resolution for accurate profile integration.
     Stored inside the RadiationProfiles cache — does not need to be written to igm_data/igm_params.yaml."""
