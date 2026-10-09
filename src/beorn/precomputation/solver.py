@@ -424,8 +424,8 @@ class RadiationProfileSolver:
         M_star_dot = (Ob / Om) * f_star_Halo(self.parameters, self.halo_mass_evolution) * self.halo_mass_derivative
         M_star_dot[np.where(self.halo_mass_evolution < self.parameters.source.halo_mass_min)] = 0
 
-        M_BH_dot = black_hole_mass_derivative(self.z_bins,self.halo_mass_evolution,0.5,1e-6,100,z_seed(100))
-        print(M_star_dot.shape,M_BH_dot.shape)
+        #M_BH_dot = black_hole_mass_derivative(self.z_bins,self.halo_mass_evolution,0.5,1e-6,100,z_seed(100))
+        #print(M_star_dot.shape,M_BH_dot.shape)
         rho_xray = np.zeros((len(rr), self.parameters.solver.halo_mass_nbin - 1, len(self.parameters.solver.halo_mass_accretion_alpha) - 1, len(self.z_bins)))
 
         # Build dMdt_int once over the full redshift history.

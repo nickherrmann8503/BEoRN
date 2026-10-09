@@ -123,7 +123,7 @@ def black_hole_mass(z,M0,f,eta,Mseed,zseed):
     mergers = eta*np.exp(A*f*ts)*cumulative_trapezoid(integrand(ts),ts,initial=0)
     mergers = mergers[::-1]#reverse back to match the order of z
     
-    BH_mass = mergers*0+edd
+    BH_mass = mergers+edd
     BH_mass[np.where(z>zseed)]= 0#exclude contributions before z_seed
 
     return BH_mass
@@ -146,7 +146,7 @@ def black_hole_mass_derivative(z,M0,f,eta,Mseed,zseed):
     #eddington growth rate proportional to current black hole mass
     edd = A*f*black_hole_mass(z,M0,f,eta,Mseed,zseed)
     
-    BH_mdot = mergers*0+edd
+    BH_mdot = mergers+edd
     BH_mdot[np.where(z>zseed)]= 0
 
     return BH_mdot

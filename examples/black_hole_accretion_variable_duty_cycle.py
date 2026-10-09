@@ -15,6 +15,7 @@ from scipy.optimize import differential_evolution, basinhopping
 from beorn.cosmo import Hubble #Hubble parameter [yr-1]
 import beorn.structs.parameters
 from beorn.astro import f_star_Halo
+from beorn.constants import h_eV_sec, eV_per_erg,h__
 from beorn.precomputation.massaccretion import mass_accretion,mass_accretion_derivative
 import logging
 #Astropy imports
@@ -47,7 +48,7 @@ A = 2*1e-8 #[/yr]
 #print(0.1*0.9*4*np.pi*6.67*1e-11*1.67*1e-27/(0.1*3e8*6.652*1e-29)*365.25*24*3600)
 eta = 1e-6
 
-Nint = 41
+Nint = 321
 Nz = 100
 cosmo = FlatLambdaCDM(H0=67.3, Om0=Om)
 
@@ -69,8 +70,8 @@ loader = beorn.load_input_data.ArtificialHaloLoader(
     halo_count = 100,
 )
 Mh_0 = np.logspace(9,13,Nint) #evenly distributed halo masses for testing purposes
-print(Mh_0)
-rng = np.random.default_rng()
+#print(Mh_0)
+#rng = np.random.default_rng()
 #Mh_0 = rng.choice(Mh_0,size=Nint,replace=True)
 
 
@@ -148,10 +149,10 @@ def z_seed(M0,M_seed):
 
 def dN_dzdMp(Mh,Mp,z):
     #Compute the number of mergers per unit redshift and per unit progenitor mass
-    alpha,beta,gamma,eta = 0.133,-1.995,0.263,0.0993*0
-    A,xi = 0.0104,9.72e-3
-    #no M_h present in draft but not in cited paper
-    return A*(Mh/1e12)**alpha*(Mp/Mh)**beta*np.exp((Mp/(Mh*xi))**gamma)
+    alpha,beta,gamma,eta = 0.133,-1.995,0.263,0.0993
+    A,xi_ = 0.0104,9.72e-3
+    #M_h present in draft but not in cited paper
+    return A*(Mh/1e12)**alpha*(Mp/Mh)**beta*np.exp((Mp/(Mh*xi_))**gamma)*(1+z)**eta
 
 def p_merge(Mh,Mp,xi,p):
     #print(Mp/Mh)
@@ -179,7 +180,7 @@ def black_hole_mass_iterative(Mh0,Mseed,f0,p,xi):
     """zs_seed = np.linspace(14,18,100)
     plt.plot(zs_seed,stellar_seed_mass_eq(zs_seed,1e12,100))
     plt.axvline(x=z_seed(1e12, 100), color='red', linestyle='--', linewidth=1)
-    plt.title(r"Stellar seed mass equation: $M_{seed}=100M_\odot$")
+    plt.title(r"Stellar seed mass equation: $M_{seed}=100M_dot$")
     plt.show()
     plt.plot(zs_seed,Mh)
     plt.show()
@@ -202,6 +203,7 @@ def black_hole_mass_iterative(Mh0,Mseed,f0,p,xi):
     for i,zseed in enumerate(z_seeds):
         index = np.digitize(zseed,zn)
         M_BH[i][index] = Mseed
+    
     #show the array
     #display_bins(M_BH,Mh,zn)
     
@@ -211,7 +213,7 @@ def black_hole_mass_iterative(Mh0,Mseed,f0,p,xi):
         for l in range(len(Mh)-1,-1,-1):
 
             M_BH[l][n] += M_BH[l][n-1]
-            
+
             #eddington accretion from the previous z bin
             gas_accr = A*duty_cycle(M_BH[l][n-1],f0,0)*M_BH[l][n-1]*dtdz(zn[n])
 
@@ -226,7 +228,7 @@ def black_hole_mass_iterative(Mh0,Mseed,f0,p,xi):
             #add them times the redshift step
             M_BH[l][n] += delta_M * Dz
 
-            #change
+            #save change
             M_mergers[l][n] += mergers * Dz
             M_accr[l][n] += gas_accr * Dz
             M_BH_dot[l][n] += delta_M * dzdt(zn[n])
@@ -234,6 +236,7 @@ def black_hole_mass_iterative(Mh0,Mseed,f0,p,xi):
             #display_bins(np.log10(M_BH),Mh,zn)
         #display_bins(np.log10(M_BH),Mh,zn,f0)
         #display_bins(DNDMDZ,Mh,zn)
+        #display_bins(M_BH,Mh,zn,Mseed,f0,p,xi,r"$M_{BH}$")
         
     
     
@@ -301,8 +304,8 @@ plt.plot(zs,fstar(mass_accretion(parameters,zs,np.array([1e11/h]),np.array([0.78
 plt.show()
 plt.plot(ms,Ob/Om*f_star_Halo(parameters,ms/h))
 plt.title(r"Star formation efficiency(Nick)")
-plt.xlabel(r"Halo mass [$M_\odot$]")
-plt.ylabel(r"$f_\star$")
+plt.xlabel(r"Halo mass [$M_dot$]")
+plt.ylabel(r"$f_tar$")
 plt.xscale('log')
 plt.yscale('log')
 plt.show()
@@ -364,6 +367,7 @@ def plot_contributions(evolution,index,f):
 
 
 def Parameter_comparison(Mh_0):
+    start_time = time.time()
     fig, axes = plt.subplots(2, 4, figsize=(14, 10),layout="constrained")
     fig.suptitle(rf"Iterative BH evolution in a halo of descendant mass:$10^{{{int(np.log10(Mh_0[-1]))}}}M_\odot$")
     z_low,z_high = 5,27
@@ -392,15 +396,15 @@ def Parameter_comparison(Mh_0):
     fs = [0.0,0.1,0.2,0.3]
     Mseeds = [50,100,300,800]
     ps = [0.0,0.1,0.3,1.0]
-    xis = [0.3,0.5,0.7,0.9]
+    xis = [0.0,0.5,0.7,0.9]
     Evolution = [[0 for i in range(4)] for j in range(4)]
     for i in range(len(fs)):
         Evolution[0][i] = black_hole_mass_iterative(Mh_0,Mseeds[1],fs[i],ps[2],xis[1])
         Evolution[1][i] = black_hole_mass_iterative(Mh_0,Mseeds[i],fs[1],ps[2],xis[1])
         Evolution[2][i] = black_hole_mass_iterative(Mh_0,Mseeds[1],fs[1],ps[i],xis[1])
         Evolution[3][i] = black_hole_mass_iterative(Mh_0,Mseeds[1],fs[1],ps[2],xis[i])
-        
-
+    print(time.time()-start_time)
+    
     #plot f dependence
     for f in range(len(fs)):
         zs = np.linspace(Evolution[0][f][3],5,Nz)
@@ -469,9 +473,9 @@ def Parameter_comparison(Mh_0):
     for m in range(5):
         for f in range(4):
             
-            axes[0][m].plot(zs,Evolution[0][f][0][m*10],label = f"f0 = {fs[f]}" )
-            axes[0][m].set_title(rf"$M_h=10^{{{int(np.log10(Mh_0[m*10]))}}}M_\odot$")
-            axes[1][m].plot(zs,Evolution[0][f][1][m*10],label = f"f0 = {fs[f]}")
+            axes[0][m].plot(zs,Evolution[0][f][0][m*(Nint//4)],label = f"f0 = {fs[f]}" )
+            axes[0][m].set_title(rf"$M_h=10^{{{int(np.log10(Mh_0[m*(Nint//4)]))}}}M_\odot$")
+            axes[1][m].plot(zs,Evolution[0][f][1][m*(Nint//4)],label = f"f0 = {fs[f]}")
             axes[0][m].set_yscale("log")
             axes[1][m].set_yscale("log")
             axes[0][m].set_xlabel("z")
@@ -483,10 +487,23 @@ def Parameter_comparison(Mh_0):
     axes[0][0].legend()
     Mh_0 = Mh_0[::-1]
     plt.show()
+    
 
-black_hole_mass_iterative(Mh_0,100,0.1,0.3,0.5)
+"""zs = np.linspace(5,25)
+M_h = 1e10
+M_p = 1e8
+z_ = 15
+M_ps = np.logspace(8,10,100)
+plt.plot(zs,dN_dzdMp(M_h,M_p,zs))
+plt.yscale("log")
+plt.show()
+plt.plot(M_ps,dN_dzdMp(M_h,M_ps,z_))
+plt.yscale("log")
+plt.xscale("log")
+plt.show()"""
 
-print(z_seed(1e11,100))
+#black_hole_mass_iterative(Mh_0,100,0.1,0.3,0.5)
+
 Parameter_comparison(Mh_0)
 """plot_contributions(BH_evolution,0,1)
 plot_f_dependence(BH_evolution,2,fs)"""
