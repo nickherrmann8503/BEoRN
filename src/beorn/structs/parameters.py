@@ -155,6 +155,31 @@ class SourceParameters:
     preserves the original behaviour (integrate back to ``solver.z_source_start``).
     """
 
+    #new BH parameters
+    M_seed: float = 100.0
+    """Mass at which BH is seeded when total stellar mass in a halo equals M_seed"""
+
+    f0: float = 0.1
+    """Eddington accretion duty cycle, parametrizes eddington efficiency"""
+
+    p_merge: float = 0.3
+    """Probability that two BHs merge if their halos merge"""
+
+    xi: float = 0.5
+    """Ratio above which two BH can merge with probability p"""
+
+    descendant_halo_mass_min: float = 1e9
+    """minimum descendant halo mass for the iterative BH evolution"""
+
+    N_descendant_halo_mass_bins: int = 21
+    """number of descendant halo mass bins between descendant halo mass minimum and target halo mass. 
+    Higher number smoothes out the discreet mergers"""
+
+    HMXB_factor: float = 0.0
+    """allows to test the contribution of high mass ratio binary on profiles"""
+
+    IMBH_factor: float = 0.0
+    """allows to test the contribution of high mass ratio binary on profiles"""
 
 
 @dataclass(slots = True)
@@ -173,7 +198,7 @@ class SolverParameters:
     halo_mass_accretion_alpha: np.ndarray = field(default_factory=lambda: np.linspace(0.1, 0.9, 10))
     """Coefficient for exponential mass accretion. Since beorn distinguishes between accretion rates a range should be specified"""
 
-    halo_mass_bin_min: float = 1e5
+    halo_mass_bin_min: float = 1e8
     """Minimum halo mass bin in solar masses."""
 
     halo_mass_bin_max: float = 1e14

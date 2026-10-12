@@ -1,2 +1,3 @@
 from .solver import RadiationProfileSolver as RadiationProfileSolver, RadiationProfileFstSolver as RadiationProfileFstSolver
 from .massaccretion import mass_accretion as mass_accretion, mass_accretion_derivative as mass_accretion_derivative
+from .blackholes import black_hole_mass_iterative as black_hole_mass_iterative,eps_xray_BH as eps_xray_BH

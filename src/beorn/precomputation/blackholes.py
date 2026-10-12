@@ -1,0 +1,190 @@
+"""
+Black Hole Evolution and Emission
+"""
+import logging
+logger = logging.getLogger(__name__)
+
+#General imports
+import numpy as np
+from scipy.optimize import brentq
+from scipy.integrate import quad,cumulative_trapezoid,trapezoid
+import matplotlib.pyplot as plt
+
+#beorn
+from ..cosmo import Hubble #Hubble parameter [yr-1]
+from ..astro import f_star_Halo
+from ..structs.parameters import Parameters
+from ..constants import h_eV_sec, eV_per_erg,h__,Hz_per_eV
+from .massaccretion import mass_accretion
+
+#constants to add
+A = 2*1e-8
+
+#Cosmological functions
+def dtdz(z,parameters):
+    return 1/((1+z)*Hubble(z,parameters))
+def dzdt(z,parameters):
+    return (1+z)*Hubble(z,parameters)
+
+def z_to_t(zs,parameters):
+    if not isinstance(zs,np.ndarray):
+        return -quad(dtdz, zs,np.inf,args=(parameters))[0]
+    return np.array([-quad(dtdz, z,np.inf)[0] for z in zs])
+
+def t_to_z(ts,parameters):
+    if not isinstance(ts,np.ndarray):
+        return brentq(lambda z: z_to_t(z,parameters)-ts, -1, 3000)
+    return np.array([brentq(lambda z: z_to_t(z,parameters)-t, -1, 3000) for t in ts])
+
+
+#Seeding mechanism
+def stellar_seed_mass_eq(z,M0,M_seed,parameters):
+    #TODO 
+    z0 = 5
+    zs = np.linspace(z0,z,100)
+    mval = mass_accretion(parameters,zs,np.array([M0]),np.array([0.785]))[0]
+    fval = (f_star_Halo(parameters,mval).squeeze())[-1]
+    Ob,Om = parameters.cosmology.Ob,parameters.cosmology.Om
+    return Ob/Om*fval*mval.squeeze()[-1]-M_seed
+
+def duty_cycle(M_BH,f0,gamma):
+    #Compute the duty cycle of black hole accretion as a function of black hole mass.
+    #TODO still constant, find appropriate values for f0 and gamma
+    return f0
+    #return f0/(1+(1e6/M_BH)**gamma)
+
+def z_seed(M0,M_seed,parameters):
+    funct = lambda z: stellar_seed_mass_eq(z,M0,M_seed,parameters)
+    try:
+        z_seed_solution = brentq(funct, 4, 30)
+    except:
+        return 5
+    return z_seed_solution
+
+def dN_dzdMp(Mh,Mp,z):
+    #Compute the number of mergers per unit redshift and per unit progenitor mass
+    #TODO put these constants in Parameters
+    alpha,beta,gamma,eta = 0.133,-1.995,0.263,0.0993
+    A,xi_ = 0.0104,9.72e-3
+    
+    return A*(Mh/1e12)**alpha*(Mp/Mh)**beta*np.exp((Mp/(Mh*xi_))**gamma)*(1+z)**eta #fakhouri 2010
+
+def p_merge(Mh,Mp,xi,p):
+    if Mp/Mh >xi:
+        return p
+    else:
+        return 0.0
+
+
+
+def black_hole_mass_iterative(zn,Mh0,parameters):
+    #parameters
+    Mseed = parameters.source.M_seed
+    f0 = parameters.source.f0
+    p = parameters.source.p_merge
+    xi = parameters.source.xi
+
+    z_end = 5
+    Mh = np.sort(Mh0)
+    Mh = Mh[::-1] #sort in descending order
+
+    #solve seeding equation for every halo
+    z_seeds = np.array([z_seed(m,Mseed,parameters) for m in Mh])
+    #z_0 = np.max(z_seeds)#first seeding 
+    #Nz = 100
+    #zn = np.linspace(z_0,z_end,Nz) #redshift bins (z_0,z_end=5)
+
+    Dz = np.abs(zn[1]-zn[0])
+    
+    #initiate array
+    M_BH = np.zeros((len(Mh),len(zn)))
+    M_BH_dot = np.zeros((len(Mh),len(zn)))
+    #seeding 
+    for i,zseed in enumerate(z_seeds):
+        index = np.digitize(zseed,zn)
+        M_BH[i][index] = Mseed
+    
+    #loop through z bins
+    for n in range(1,len(zn)):
+        #loop through M bins
+        for l in range(len(Mh)-1,-1,-1):
+
+            M_BH[l][n] += M_BH[l][n-1]
+
+            #eddington accretion from the previous z bin
+            gas_accr = A*duty_cycle(M_BH[l][n-1],f0,0)*M_BH[l][n-1]*dtdz(zn[n],parameters)
+
+            mergers = 0.0
+            for i in range(len(Mh)-1,l,-1):
+                
+                mergers +=  np.abs((Mh[i]-Mh[i-1]))/Mh[l]*dN_dzdMp(Mh[l],Mh[i],zn[n]) * M_BH[i][n] * p_merge(Mh[l],Mh[i],xi,p)
+            
+            #add both contributions
+            delta_M = gas_accr+ mergers
+
+            #add them times the redshift step
+            M_BH[l][n] += delta_M * Dz
+
+            #save change
+            M_BH_dot[l][n] += delta_M * dzdt(zn[n],parameters)
+
+            
+    return M_BH,M_BH_dot,Mh
+
+
+def eps_xray_BH(nu_, parameters: Parameters,Mdot_BH,type):
+    """Spectral distribution of X-ray emission per unit BH accretion.
+    Args:
+        nu_ (float or array): Photon frequency in Hz.
+        parameters (Parameters): Model parameters container.
+
+    Returns:
+        float or array: Spectral photon emission rate per unit BH accretion.
+
+    Notes:
+        The implementation follows Eq. 15 and 16 of Felix's Thesis
+    """
+    #Hard coded parameters:
+    k1 = -0.026
+    k2 = 0.278
+    c1 = 5.712
+    c2 = 17.67
+    beta = 0.24
+    psi4375 = 0.73
+    psi_min = 0.2
+    psi_max = 0.84
+    f_X = 1
+    c_X = parameters.source.xray_normalisation #[erg/s yr/M_sun]
+    e_r = 0.1 #radiative efficiency
+    al_IMBH = 1.5 #spectral index for IMBH
+    al_HMXB = 1.0 #spectral index for HMXB
+
+    #calculate the obscured fraction of the AGN
+    def obsc_fraction(L_X):
+        return np.minimum(psi_max,np.maximum(psi_min,psi4375-beta*(np.log10(L_X)-43.75)))
+    
+    if type == "HMXB":
+        #normalize for each redshift
+        A = 1.0/trapezoid(nu_**(-al_HMXB),nu_,axis=0)
+        #print(A*f_X*c_X/(h_eV_sec*nu_) * nu_**(-al_HMXB) * eV_per_erg)
+        return A*f_X*c_X/(h_eV_sec*nu_) * nu_**(-al_HMXB) * eV_per_erg #[photons/Hz/s /(yr/Msun)]
+    elif type == "IMBH":
+        L_bol = e_r*Mdot_BH*3e8**2
+        K_X = np.full_like(L_bol,1.0)
+        mask = L_bol > 0.0
+        K_X[mask] = c1*(L_bol[mask]/1e10)**k1 + c2*(L_bol[mask]/1e10)**k2
+        L_X = L_bol/K_X
+        
+        psi = obsc_fraction(L_X)
+        #normalize for each redshift
+        A = 1.0/trapezoid(nu_**(-al_IMBH),nu_,axis=0)
+        #print((e_r*3e10**2)/(K_X * h_eV_sec/eV_per_erg * nu_) * (1-psi) * A * nu_**(-al_IMBH) * 6.3e25)
+        return (e_r*3e10**2)/(K_X * h_eV_sec/eV_per_erg * nu_) * (1-psi) * A * nu_**(-al_IMBH) * 6.3e25
+
+
+#zs = np.linspace(27,5,100)
+#Evolution = black_hole_mass_iterative(zs,np.logspace(9,13,21),100,0.1,0.3,0.5)
+
+
+"""plt.plot(zs,eps_xray_BH(3e17,parameters,Evolution[1][0],"IMBH"))
+plt.show()"""

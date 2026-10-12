@@ -11,6 +11,7 @@ import numpy as np
 from scipy.integrate import trapezoid, solve_ivp
 from scipy.interpolate import interp1d
 import logging
+import matplotlib.pyplot as plt
 
 from ..cosmo import comoving_distance, hubble, Hubble
 from ..cross_sections import alpha_HII
@@ -21,7 +22,8 @@ from ..structs.radiation_profiles import RadiationProfiles, RadiationProfilesFSt
 from .. import constants
 # TODO: replace these unit conversions by astropy units
 from ..constants import m_p_in_Msun, km_per_Mpc, h_eV_sec, cm_per_Mpc, E_HI, E_HeI, kb_eV_per_K, rhoc0
-from ..astro import f_Xh, f_star_Halo, eps_xray,eps_xray_BH
+from ..astro import f_Xh, f_star_Halo, eps_xray
+from .blackholes import eps_xray_BH,black_hole_mass_iterative
 from .helpers import Ngdot_ion, rho_alpha_profile, cum_optical_depth
 from .massaccretion import mass_accretion
 from copy import deepcopy
@@ -404,6 +406,8 @@ class RadiationProfileSolver:
         Emax = self.parameters.source.energy_cutoff_max_xray
         NE = 50
 
+        
+
         nb0 = rhoc0 * Ob / (m_p_in_Msun * h0)  # [h/Mpc]^3
 
         # zprime binning
@@ -423,9 +427,21 @@ class RadiationProfileSolver:
 
         M_star_dot = (Ob / Om) * f_star_Halo(self.parameters, self.halo_mass_evolution) * self.halo_mass_derivative
         M_star_dot[np.where(self.halo_mass_evolution < self.parameters.source.halo_mass_min)] = 0
-
-        #M_BH_dot = black_hole_mass_derivative(self.z_bins,self.halo_mass_evolution,0.5,1e-6,100,z_seed(100))
-        #print(M_star_dot.shape,M_BH_dot.shape)
+        #y = np.concatenate((np.zeros_like(M_star_dot[..., :1]), M_star_dot), axis=-1)
+        
+        
+        #get final descendant mass
+        Mh_0 = self.halo_mass_evolution.squeeze()[-1]
+        Mh_0s = np.logspace(np.log10(self.parameters.source.descendant_halo_mass_min),np.log10(Mh_0),self.parameters.source.N_descendant_halo_mass_bins)
+        
+        M_BH,M_BH_dot,Mh = black_hole_mass_iterative(self.z_bins,Mh_0s,self.parameters)
+        M_BH_dot = np.array([[M_BH_dot[0]]])
+        """#print(M_star_dot.shape,M_BH_dot.shape)
+        print("Mh:",Mh)
+        plt.plot(self.z_bins,M_BH_dot[0][0])
+        plt.yscale("log")
+        plt.show()
+        #print(M_star_dot.shape,M_BH_dot.shape)"""
         rho_xray = np.zeros((len(rr), self.parameters.solver.halo_mass_nbin - 1, len(self.parameters.solver.halo_mass_accretion_alpha) - 1, len(self.z_bins)))
 
         # Build dMdt_int once over the full redshift history.
@@ -440,13 +456,15 @@ class RadiationProfileSolver:
             axis = -1,
             fill_value = 'extrapolate',
         )
+        #plt.plot(np.concatenate(([_z_anchor], self.z_bins)),np.concatenate((np.zeros_like(M_star_dot[..., :1]), M_star_dot), axis=-1)[0][0])
+        #plt.show()
         dM_BHdt_int = interp1d(
             x = np.concatenate(([_z_anchor],self.z_bins)),
-            y = np.concatenate((np.zeros_like(M_star_dot[..., :1]), M_star_dot), axis=-1),
+            y = np.concatenate((np.zeros_like(M_BH_dot[...,:1]), M_BH_dot), axis=-1),
             axis = -1,
             fill_value = 'extrapolate',
-        )
-
+        )  
+        
         for i, z in enumerate(self.z_bins):
             # Determine the maximum lookback redshift for this snapshot.
             # When source_age is set, this caps the integration window to the
@@ -477,15 +495,38 @@ class RadiationProfileSolver:
                 nu_prime = nu_val[:, None] * ((1 + z_prime) / (1 + z))[None, :]
                 eps_X = eps_xray(nu_prime, self.parameters)
                 # eps_X has a redshift component and the nu component (2d)
-
+                #print(eps_X[0][0])
                 #Get eps_X for both HMXB and IMBH
-                eps_X_BH = eps_xray_BH(nu_prime, self.parameters,0,"IMBH")
+                eps_X_BH = eps_xray_BH(nu_prime, self.parameters,dM_BHdt_int(z_prime),"IMBH")[0]
                 eps_X_XB = eps_xray_BH(nu_prime, self.parameters,0,"HMXB")
-                
-                #the total x ray luminosity is:
-                L_tot = eps_X_XB[:,None,None,:] * dMdt_int(z_prime)[None,...]#includes f_star
-                L_tot += eps_X_BH[:,None,None,:]
+                #print(eps_X_XB[:,None,None,:].shape,dMdt_int(z_prime)[None,...].shape)
+                #print(eps_X_XB[0][0])
+                #print("dM_BHdt:",dM_BHdt_int(z_prime))
+                #print("eps",eps_X_BH[:,:])
 
+                #it works
+                """plt.plot(z_prime,(eps_X_BH[:,None,None,:] * dM_BHdt_int(z_prime)[None,...])[-1,0,0,:])
+                #plt.plot(z_prime,)
+                plt.show()"""
+                #the total x ray luminosity is:
+                L_tot = eps_X_XB[:,None,None,:] * dMdt_int(z_prime)[None,...]* self.parameters.source.HMXB_factor#includes f_star
+                L_tot_BH= eps_X_BH[:,None,None,:] * dM_BHdt_int(z_prime)[None,...] * self.parameters.source.IMBH_factor
+                """if z == min(self.z_bins):
+                    plt.plot(z_prime,L_tot[0,0,0,:])
+                    plt.plot(z_prime,L_tot_BH[0,0,0,:])
+                    plt.plot(z_prime,(eps_X[:,  None, None, :] * dMdt_int(z_prime)[None, ...])[0,0,0,:],label= "Stars")
+                    plt.yscale("log")
+                    plt.title("Comparison between HMXB and IMBH total luminosities")
+                    plt.ylabel("L_tot [erg/s]")
+                    plt.legend()
+                    plt.show()"""
+                L_tot += L_tot_BH
+                """print(dM_BHdt_int(z_prime)[None,...].max())
+                plt.plot(np.linspace(0,L_tot.shape[3],L_tot.shape[3]),L_tot[-1,0,0,:])
+                plt.plot(np.linspace(0,L_tot.shape[3],L_tot.shape[3]),L_tot_BH[-1,0,0,:],label= "BH")
+                plt.yscale("log")
+                plt.legend()
+                plt.show()"""
                 # complication - the integrand is expressed in terms of the radial distance
                 # we perform a hack to interpret eps(z) as a function of r
                 # the mass also had an M0, alpha dependence, so we the missing axis
