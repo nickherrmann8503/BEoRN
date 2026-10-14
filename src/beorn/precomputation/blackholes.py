@@ -40,6 +40,16 @@ def t_to_z(ts,parameters):
 #Seeding mechanism
 def stellar_seed_mass_eq(z,M0,M_seed,parameters):
     #TODO 
+    """Compute difference between total stellar mass and black hole seed mass
+    
+    Args:
+        z (np.ndarray/float): redshift at which to evaluate difference
+        M0 (float): descendant halo mass
+        M_seed (float): Black hole seed mass
+
+    Returns:
+        (np.ndarray/float)
+    """
     z0 = 5
     zs = np.linspace(z0,z,100)
     mval = mass_accretion(parameters,zs,np.array([M0]),np.array([0.785]))[0]
@@ -56,7 +66,7 @@ def duty_cycle(M_BH,f0,gamma):
 def z_seed(M0,M_seed,parameters):
     funct = lambda z: stellar_seed_mass_eq(z,M0,M_seed,parameters)
     try:
-        z_seed_solution = brentq(funct, 4, 30)
+        z_seed_solution = brentq(funct, 4, 32)
     except:
         return 5
     return z_seed_solution
@@ -70,6 +80,17 @@ def dN_dzdMp(Mh,Mp,z):
     return A*(Mh/1e12)**alpha*(Mp/Mh)**beta*np.exp((Mp/(Mh*xi_))**gamma)*(1+z)**eta #fakhouri 2010
 
 def p_merge(Mh,Mp,xi,p):
+    """Model Black hole mergers
+    
+    Args:
+        Mh (float): descendant halo mass
+        Mp (float): progenitor descendant halo mass
+        xi (float): ratio of masses above which the black holes can merge
+        p (float): probability of black holes to merge given their halos merge
+
+    Returns:
+        (float)
+    """
     if Mp/Mh >xi:
         return p
     else:
@@ -78,27 +99,34 @@ def p_merge(Mh,Mp,xi,p):
 
 
 def black_hole_mass_iterative(zn,Mh0,parameters):
+    """Compute the black hole mass evolution for different halo mass and redshift bins
+    
+    Args:
+        zn (np.ndarray): redshift bins
+        Mh0 (np.ndarray): descendent halo masses
+
+    Returns:
+        numpy.ndarray: Black Hole mass growth in redshift and descendant halo mass bins
+        shape (len(Mh0),len(zn))
+    """
     #parameters
     Mseed = parameters.source.M_seed
     f0 = parameters.source.f0
     p = parameters.source.p_merge
     xi = parameters.source.xi
 
-    z_end = 5
     Mh = np.sort(Mh0)
-    Mh = Mh[::-1] #sort in descending order
+    Mh = Mh[::-1]
 
     #solve seeding equation for every halo
     z_seeds = np.array([z_seed(m,Mseed,parameters) for m in Mh])
-    #z_0 = np.max(z_seeds)#first seeding 
-    #Nz = 100
-    #zn = np.linspace(z_0,z_end,Nz) #redshift bins (z_0,z_end=5)
-
+    
     Dz = np.abs(zn[1]-zn[0])
     
     #initiate array
     M_BH = np.zeros((len(Mh),len(zn)))
     M_BH_dot = np.zeros((len(Mh),len(zn)))
+    print(Mh,z_seeds)
     #seeding 
     for i,zseed in enumerate(z_seeds):
         index = np.digitize(zseed,zn)
@@ -114,6 +142,7 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
             #eddington accretion from the previous z bin
             gas_accr = A*duty_cycle(M_BH[l][n-1],f0,0)*M_BH[l][n-1]*dtdz(zn[n],parameters)
 
+            #mergers from smaller mass halos
             mergers = 0.0
             for i in range(len(Mh)-1,l,-1):
                 
@@ -128,7 +157,6 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
             #save change
             M_BH_dot[l][n] += delta_M * dzdt(zn[n],parameters)
 
-            
     return M_BH,M_BH_dot,Mh
 
 
@@ -180,11 +208,3 @@ def eps_xray_BH(nu_, parameters: Parameters,Mdot_BH,type):
         A = 1.0/trapezoid(nu_**(-al_IMBH),nu_,axis=0)
         #print((e_r*3e10**2)/(K_X * h_eV_sec/eV_per_erg * nu_) * (1-psi) * A * nu_**(-al_IMBH) * 6.3e25)
         return (e_r*3e10**2)/(K_X * h_eV_sec/eV_per_erg * nu_) * (1-psi) * A * nu_**(-al_IMBH) * 6.3e25
-
-
-#zs = np.linspace(27,5,100)
-#Evolution = black_hole_mass_iterative(zs,np.logspace(9,13,21),100,0.1,0.3,0.5)
-
-
-"""plt.plot(zs,eps_xray_BH(3e17,parameters,Evolution[1][0],"IMBH"))
-plt.show()"""

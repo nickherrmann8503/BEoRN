@@ -559,6 +559,7 @@ x_ray = eps_xray_BH(nu,parameters,Evolution[1][10][10],"IMBH")
 plt.plot(nu,x_ray)
 plt.xscale("log")
 plt.show()"""
+print(z_seed(1e9,800))
 
 #test for solver
 Mh_0s = np.logspace(9,np.log10(1.065e+11),21)

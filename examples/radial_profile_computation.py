@@ -161,15 +161,6 @@ def plot_temperature_profile(parameters: Parameters, profiles: RadiationProfiles
     ax = plt.gca()
     leg1 = ax.legend(handles=handles,loc='upper center')
     ax.add_artist(leg1)
-    #default legend
-    handles = [
-    Line2D([0], [0], color="lightgrey", lw=2, label=f"z= {redshifts[0]}"),
-    Line2D([0], [0], color="grey", lw=2, label=f"z= {redshifts[1]}"),
-    Line2D([0], [0], color="black", lw=2, label=f"z= {redshifts[2]}"),
-    ]
-    ax = plt.gca()
-    leg3 = ax.legend(handles=handles,loc='lower right')
-    ax.add_artist(leg3)
 
     for i, zi in enumerate(redshifts):
         ind_z = np.argmin(np.abs(zz - zi))
@@ -201,7 +192,7 @@ def plot_temperature_profile(parameters: Parameters, profiles: RadiationProfiles
                 color = ["lightgrey","grey","black"]
                 plt.loglog(co_radial_grid / 0.68, Temp_profile, lw=1.7, color=color[i], ls=line_style,label = f"z={zi}, "+label)
             else:
-                plt.loglog(co_radial_grid / 0.68, Temp_profile, lw=1.7, color=color, ls=line_style,label = f"z={zi}, "+label)
+                plt.loglog(co_radial_grid / 0.68, Temp_profile, lw=1.7, color=color, ls=line_style)#,label = f"z={zi}, "+label)
             
 def parameter_comparison_temperature(redshifts,cache_handler,test_params):
     #change this
@@ -263,8 +254,8 @@ Mseeds = [50,100,300,800]
 ps = [0.0,0.1,0.3,1.0]
 xis = [0.0,0.5,0.7,0.9]
 parameter_comparison_temperature(loader.redshifts,cache_handler,Mseeds)
-
-plt.title("Temperature profiles")
+plt.legend(loc="center right")
+plt.title(f"Temperature profiles with f0={parameters.source.f0},p={parameters.source.p_merge},xi={parameters.source.xi}")
 plt.xlim(2e-2, 1e2)
 plt.ylim(0.8, 1e5)
 plt.xlabel('r [cMpc]')

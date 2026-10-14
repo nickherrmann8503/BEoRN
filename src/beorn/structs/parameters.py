@@ -168,7 +168,7 @@ class SourceParameters:
     xi: float = 0.5
     """Ratio above which two BH can merge with probability p"""
 
-    descendant_halo_mass_min: float = 1e9
+    descendant_halo_mass_min: float = 1e8
     """minimum descendant halo mass for the iterative BH evolution"""
 
     N_descendant_halo_mass_bins: int = 21

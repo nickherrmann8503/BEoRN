@@ -429,11 +429,15 @@ class RadiationProfileSolver:
         M_star_dot[np.where(self.halo_mass_evolution < self.parameters.source.halo_mass_min)] = 0
         #y = np.concatenate((np.zeros_like(M_star_dot[..., :1]), M_star_dot), axis=-1)
         
-        
+        #print(self.halo_mass_evolution.shape)
         #get final descendant mass
-        Mh_0 = self.halo_mass_evolution.squeeze()[-1]
-        Mh_0s = np.logspace(np.log10(self.parameters.source.descendant_halo_mass_min),np.log10(Mh_0),self.parameters.source.N_descendant_halo_mass_bins)
-        
+        Mh_0 = self.halo_mass_evolution[:,0,-1]
+        if (self.halo_mass_evolution.shape != (1,1,len(self.z_bins))):
+            Mh_0s = Mh_0
+        else:
+            #if only one halo create smaller halos to simulate mergers
+            Mh_0s = np.logspace(np.log10(self.parameters.source.descendant_halo_mass_min),np.log10(Mh_0),self.parameters.source.N_descendant_halo_mass_bins)
+        #print("Mh-0s",Mh_0s)
         M_BH,M_BH_dot,Mh = black_hole_mass_iterative(self.z_bins,Mh_0s,self.parameters)
         M_BH_dot = np.array([[M_BH_dot[0]]])
         """#print(M_star_dot.shape,M_BH_dot.shape)
