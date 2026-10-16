@@ -175,19 +175,13 @@ def display_bins(M_BH,Mh,zn,Mseed,f0,p,xi,title):
     plt.title(rf"$M_{{seed}}$={Mseed},f={f0},p={p},$\xi$={xi}in {len(zn)} z bins and {len(Mh)} Mh bins")
     plt.show()
 
+
+
 def black_hole_mass_iterative(zn,Mh0,Mseed,f0,p,xi):
     #redshift in descending order
     z_end = zs[-1]
     Mh = np.sort(Mh0)
     Mh = Mh[::-1] #sort in descending order
-    """zs_seed = np.linspace(14,18,100)
-    plt.plot(zs_seed,stellar_seed_mass_eq(zs_seed,1e12,100))
-    plt.axvline(x=z_seed(1e12, 100), color='red', linestyle='--', linewidth=1)
-    plt.title(r"Stellar seed mass equation: $M_{seed}=100M_dot$")
-    plt.show()
-    plt.plot(zs_seed,Mh)
-    plt.show()
-    print(z_seed(Mh[0], 100),z_seed(Mh[-1], 100),z_seed(Mh[50], 100))"""
 
     #solve seeding equation for every halo
     z_seeds = np.array([z_seed(m,Mseed) for m in Mh])
@@ -438,16 +432,16 @@ def Parameter_comparison(Mh_0):
         ax_dot.yaxis.set_major_locator(LogLocator(base=10, numticks=100))  # every decade
         ax_dot.grid(True, which="major", linestyle="--", alpha=0.5)
 
-    fs = [0.0,0.1,0.2,0.3]
-    Mseeds = [50,100,300,800]
-    ps = [0.0,0.1,0.3,1.0]
-    xis = [0.0,0.5,0.7,0.9]
-    Evolution = [[0 for i in range(4)] for j in range(4)]
+    fs = [0.0,0.1,0.2,0.3,0.5,1.0]
+    Mseeds = [50,100,300,500,800,1100]
+    ps = [0.0,0.1,0.3,0.5,0.7,1.0]
+    xis = [0.0,0.1,0.3,0.5,0.7,0.9]
+    Evolution = [[0 for i in range(6)] for j in range(4)]
     for i in range(len(fs)):
-        Evolution[0][i] = black_hole_mass_iterative(zs,Mh_0,Mseeds[1],fs[i],ps[2],xis[1])
-        Evolution[1][i] = black_hole_mass_iterative(zs,Mh_0,Mseeds[i],fs[1],ps[2],xis[1])
+        Evolution[0][i] = black_hole_mass_iterative(zs,Mh_0,Mseeds[1],fs[i],0.0,xis[1])
+        Evolution[1][i] = black_hole_mass_iterative(zs,Mh_0,Mseeds[i],fs[1],0.0,xis[1])
         Evolution[2][i] = black_hole_mass_iterative(zs,Mh_0,Mseeds[1],fs[1],ps[i],xis[1])
-        Evolution[3][i] = black_hole_mass_iterative(zs,Mh_0,Mseeds[1],fs[1],ps[2],xis[i])
+        Evolution[3][i] = black_hole_mass_iterative(zs,Mh_0,Mseeds[1],fs[1],0.0,xis[i])
     print(time.time()-start_time)
     
     #plot f dependence
@@ -455,14 +449,14 @@ def Parameter_comparison(Mh_0):
         #zs = np.linspace(Evolution[0][f][3],5,Nz)
         axes[0][0].plot(zs,Evolution[0][f][0][0],label = f"f={fs[f]:.1f}")
     axes[0][0].legend()
-    axes[0][0].set_title(r"$M_{seed}=100M_\odot,p=0.3,\xi= 0.5$")
+    axes[0][0].set_title(r"$M_{seed}=100M_\odot,p=0.0,\xi= 0.5$")
 
     #plot Mseed dependence
     for m in range(len(Mseeds)):
         #zs = np.linspace(Evolution[1][m][3],5,Nz)
         axes[0][1].plot(zs,Evolution[1][m][0][0],label = rf"M_seed={Mseeds[m]}$M_\odot$")
     axes[0][1].legend()
-    axes[0][1].set_title(r"$f = 0.1,p=0.3,\xi= 0.5$")
+    axes[0][1].set_title(r"$f = 0.1,p=0.0,\xi= 0.5$")
 
     #plot p dependence
     for p in range(len(Mseeds)):
@@ -476,7 +470,7 @@ def Parameter_comparison(Mh_0):
         #zs = np.linspace(Evolution[3][xi][3],5,Nz)
         axes[0][3].plot(zs,Evolution[3][xi][0][0],label = f"xi={xis[xi]:.1f}")
     axes[0][3].legend()
-    axes[0][3].set_title(r"$f = 0.1,M_{seed} = 100M_\odot,p= 0.3$")
+    axes[0][3].set_title(r"$f = 0.1,M_{seed} = 100M_\odot,p= 0.0$")
 
     #M DOT
     #plot f dependence
@@ -516,7 +510,7 @@ def Parameter_comparison(Mh_0):
     #zs = np.linspace(Evolution[0][1][3],5,Nz)
     Mh_0 = Mh_0[::-1]
     for m in range(5):
-        for f in range(4):
+        for f in range(6):
             
             axes[0][m].plot(zs,Evolution[0][f][0][m*(Nint//4)],label = f"f0 = {fs[f]}" )
             axes[0][m].set_title(rf"$M_h=10^{{{int(np.log10(Mh_0[m*(Nint//4)]))}}}M_\odot$")
@@ -527,8 +521,8 @@ def Parameter_comparison(Mh_0):
             axes[0][m].set_ylabel(r"$M_{BH} [M_\odot/h]$")
             axes[1][m].set_xlabel("z")
             axes[1][m].set_ylabel(r"$\dot{M}_{BH} [M_\odot/yr/h]$")
-            axes[0][m].set_ylim((1e1,1e8))
-            axes[1][m].set_ylim(1e-9,1e-1)
+            axes[0][m].set_ylim((1e1,1e10))
+            axes[1][m].set_ylim(1e-9,1e1)
     axes[0][0].legend()
     Mh_0 = Mh_0[::-1]
     plt.show()
@@ -573,7 +567,7 @@ plt.yscale("log")
 plt.show()
 
 
-#Parameter_comparison(Mh_0)
+Parameter_comparison(Mh_0)
 """plot_contributions(BH_evolution,0,1)
 plot_f_dependence(BH_evolution,2,fs)"""
 

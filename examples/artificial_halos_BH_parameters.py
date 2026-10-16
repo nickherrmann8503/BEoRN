@@ -20,7 +20,10 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-
+from beorn.precomputation.blackholes import black_hole_mass_iterative,stellar_seed_mass_eq
+from beorn.mass_function import HaloMassFunction
+from beorn.precomputation.massaccretion import mass_accretion
+from beorn.astro import f_star_Halo
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -104,9 +107,17 @@ parameters.source.n_lyman_alpha_photons = 9690
 parameters.source.halo_mass_min = 1e4
 
 #Black holes
+default_p = 0.0
+default_xi = 0.3
+default_f0 = 1.0
+default_Mseed = 100
+
 parameters.source.IMBH_factor = 1.0
-parameters.source.p_merge = 1.0
-parameters.source.xi = 0.3
+parameters.source.HMXB_factor = 1.0
+parameters.source.p_merge = default_p
+parameters.source.xi = default_xi
+parameters.source.f0 = default_f0
+parameters.source.M_seed = default_Mseed
 
 
 
@@ -122,12 +133,16 @@ loader = beorn.load_input_data.ArtificialHaloLoader(
     halo_count = 100,
 )
 recompute = False
-
+print(loader.redshifts)
 
 def compute_no_BH_z_quantities(parameters,redshifts):
     print("computing no BH signal")
     parameters.source.IMBH_factor = 0.0
     parameters.source.HMXB_factor = 0.0
+    parameters.source.p_merge = default_p
+    parameters.source.xi = default_xi
+    parameters.source.f0 = default_f0
+    parameters.source.M_seed = default_Mseed
 
     output_handler = beorn.io.Handler(OUTPUT_ROOT)
 
@@ -159,46 +174,90 @@ def main(BH_parameters):
     "p": [],
     "xi": []
     }
+
+    output_handler = beorn.io.Handler(OUTPUT_ROOT)
+    
+    BH_multi_z_quantities = {
+        "f0": [],
+        "M_seed": [],
+        "p": [],
+        "xi": []
+    }
+
     #compute profiles for different parameters
     for f in BH_parameters['f0']:
         print(f"computing profile for f0:{f}")
         parameters.source.f0 = f
         solver = beorn.precomputation.RadiationProfileSolver(parameters, loader.redshifts)
-        profiles = solver.get_or_compute_profiles(cache_handler,force_recompute=recompute)
-        BH_profiles['f0'].append(profiles)
-    parameters.source.f0 = 0.5
+        profile = solver.get_or_compute_profiles(cache_handler,force_recompute=recompute)
+        BH_profiles['f0'].append(profile)
+
+        print(f"painting f0={f}")
+        p = beorn.painting.PaintingCoordinator(
+            parameters,
+            loader=loader,
+            output_handler=output_handler,
+            force_recompute=recompute,
+        )
+        BH_multi_z_quantities["f0"].append(p.paint_full(profile))
+    parameters.source.f0 = default_f0
 
     for M in BH_parameters['M_seed']:
         print(f"computing profile for M_seed:{M}")
         parameters.source.M_seed = M
         solver = beorn.precomputation.RadiationProfileSolver(parameters, loader.redshifts)
-        profiles = solver.get_or_compute_profiles(cache_handler,force_recompute=recompute)
-        BH_profiles['M_seed'].append(profiles)
-    parameters.source.M_seed = 100
+        profile = solver.get_or_compute_profiles(cache_handler,force_recompute=recompute)
+        BH_profiles['M_seed'].append(profile)
 
-    for p in BH_parameters['p']:
-        print(f"computing profile for p:{p}")
-        parameters.source.p_merge = p
+        print(f"painting M_seed={M}")
+        p = beorn.painting.PaintingCoordinator(
+            parameters,
+            loader=loader,
+            output_handler=output_handler,
+            force_recompute=recompute,
+        )
+        BH_multi_z_quantities["M_seed"].append(p.paint_full(profile))
+    parameters.source.M_seed = default_Mseed
+
+    for p_ in BH_parameters['p']:
+        print(f"computing profile for p:{p_}")
+        parameters.source.p_merge = p_
         solver = beorn.precomputation.RadiationProfileSolver(parameters, loader.redshifts)
-        profiles = solver.get_or_compute_profiles(cache_handler,force_recompute=recompute)
-        BH_profiles['p'].append(profiles)
-    parameters.source.p_merge = 0.3
+        profile = solver.get_or_compute_profiles(cache_handler,force_recompute=recompute)
+        BH_profiles['p'].append(profile)
+
+        print(f"painting p={p_}")
+        p = beorn.painting.PaintingCoordinator(
+            parameters,
+            loader=loader,
+            output_handler=output_handler,
+            force_recompute=recompute,
+        )
+        BH_multi_z_quantities["p"].append(p.paint_full(profile))
+    parameters.source.p_merge = default_p
 
     for xi in BH_parameters['xi']:
         print(f"computing profile for xi:{xi}")
         parameters.source.xi = xi
         solver = beorn.precomputation.RadiationProfileSolver(parameters, loader.redshifts)
-        profiles = solver.get_or_compute_profiles(cache_handler,force_recompute=recompute)
-        BH_profiles['xi'].append(profiles)
-    parameters.source.xi = 0.5
+        profile = solver.get_or_compute_profiles(cache_handler,force_recompute=recompute)
+        BH_profiles['xi'].append(profile)
+
+        print(f"painting xi={xi}")
+        p = beorn.painting.PaintingCoordinator(
+            parameters,
+            loader=loader,
+            output_handler=output_handler,
+            force_recompute=recompute,
+        )
+        BH_multi_z_quantities["xi"].append(p.paint_full(profile))
+    parameters.source.xi = default_xi
 
     # %% [markdown]
     # ## 4. Inspect the halo distribution
     # 
     # As a quick sanity check, we project the halo positions onto the 2D plane to confirm that they are distributed throughout the simulation box. Each pixel shows the number of halos along the line of sight.
 
-    # %%
-    
 
     """
     mesh = halo_catalog.to_mesh()
@@ -218,16 +277,8 @@ def main(BH_parameters):
     # BEoRN places the pre-computed radiation profiles around each halo and accumulates their contributions on the 3D grid. The result is a time-series of coeval cubes, each containing the ionization fraction, gas temperature, and Lyman-alpha coupling field at a given redshift. From these, the 21-cm brightness temperature $\delta T_b$ is computed.
 
     # %%
-    output_handler = beorn.io.Handler(OUTPUT_ROOT)
-
     
-    BH_multi_z_quantities = {
-        "f0": [],
-        "M_seed": [],
-        "p": [],
-        "xi": []
-    }
-    
+    """print("painting f0 dependent profiles")
     for i,profile in enumerate(BH_profiles['f0']):
         parameters.source.f0 = BH_params['f0'][i]
         p = beorn.painting.PaintingCoordinator(
@@ -237,7 +288,8 @@ def main(BH_parameters):
             force_recompute=recompute,
         )
         BH_multi_z_quantities["f0"].append(p.paint_full(profile))
-    parameters.source.f0 = 0.1
+    parameters.source.f0 = default_f0
+
     print("painting M_seed dependent profiles")
     for i,profile in enumerate(BH_profiles['M_seed']):
         parameters.source.M_seed = BH_params['M_seed'][i]
@@ -248,7 +300,7 @@ def main(BH_parameters):
             force_recompute=recompute,
         )
         BH_multi_z_quantities["M_seed"].append(p.paint_full(profile))
-    parameters.source.M_seed = 100
+    parameters.source.M_seed = default_Mseed
 
     print("painting p dependent profiles")
     for i,profile in enumerate(BH_profiles['p']):
@@ -260,7 +312,7 @@ def main(BH_parameters):
             force_recompute=recompute,
         )
         BH_multi_z_quantities["p"].append(p.paint_full(profile))
-    parameters.source.p_merge = 0.3
+    parameters.source.p_merge = default_p
 
     print("painting xi dependent profiles")
     for i,profile in enumerate(BH_profiles['xi']):
@@ -272,9 +324,7 @@ def main(BH_parameters):
             force_recompute=recompute,
         )
         BH_multi_z_quantities["xi"].append(p.paint_full(profile))
-    parameters.source.xi = 0.5
-
-
+    parameters.source.xi = default_xi"""
 
     return BH_multi_z_quantities
 
@@ -285,33 +335,208 @@ def plot_dTb_Powerspectrum_parameter(BH_multi_z,BH_parameters,param = "f0"):
 
     colors = ["purple","orange","red","blue","yellow","grey"]
     fig = plt.figure(constrained_layout=True, figsize=(18, 6))
-    gs = gridspec.GridSpec(1, 2, figure=fig)
-    ax1 = fig.add_subplot(gs[0, 0])
+    fig.suptitle(f"BH parameter comparison for {param}")
+    gs = gridspec.GridSpec(2, 3, figure=fig)
+    ax1 = fig.add_subplot(gs[:, 0])
     ax2 = fig.add_subplot(gs[0, 1])
+    ax3 = fig.add_subplot(gs[1, 1], sharex=ax2)
+    ax4 = fig.add_subplot(gs[:, 2])
 
     #draw default
     beorn.plotting.draw_dTb_signal(ax1, default,color= "black",label= f"no BH")
-    beorn.plotting.draw_dTb_power_spectrum_of_z(ax2, default, parameters,color= "black",label= f"no BH")
-            
+    beorn.plotting.draw_dTb_power_spectrum_of_z(ax4, default, parameters,color= "black",label= f"no BH")
+    beorn.plotting.draw_Temp_signal(ax2, default,color= "black",label= f"no BH")
+    beorn.plotting.draw_xHII_signal(ax3, default,color= "black",label= f"no BH")
+          
 
     for i in range(len(BH_parameters[param])):
         beorn.plotting.draw_dTb_signal(ax1, BH_multi_z[param][i],color= colors[i],label= f"{param}={BH_parameters[param][i]}")
-        beorn.plotting.draw_dTb_power_spectrum_of_z(ax2, BH_multi_z[param][i], parameters,color= colors[i],label= f"{param}={BH_parameters[param][i]}")
-        
-        #beorn.plotting.draw_dTb_power_spectrum_of_z(ax2, BH_multi_z["M_seed"][i], parameters,color= colors[i],label= f"{param}={BH_parameters[param][i]}")
-    plt.title(f"{param}")
+        beorn.plotting.draw_Temp_signal(ax2, BH_multi_z[param][i],color= colors[i],label= f"{param}={BH_parameters[param][i]}")
+        beorn.plotting.draw_xHII_signal(ax3, BH_multi_z[param][i],color= colors[i],label= f"{param}={BH_parameters[param][i]}")
+        beorn.plotting.draw_dTb_power_spectrum_of_z(ax4, BH_multi_z[param][i], parameters,color= colors[i],label= f"{param}={BH_parameters[param][i]}")
+    
     plt.legend()
     plt.show()
 
+def plot_light_cone(BH_multi_z,i,param):
+
+
+    lightcone = beorn.structs.Lightcone.build(
+            parameters,
+            BH_multi_z[param][i],
+            quantity="Grid_dTb",
+            
+        )
+    
+    fig, ax = plt.subplots(figsize=(18, 6))
+    beorn.plotting.plot_lightcone(lightcone, ax, "", slice_number=80)
+    plt.show()
+
+def plot_BHMF_z(redshifts):
+    M   = np.logspace(8, 15, 60)
+    halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
+    M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
+    hmf = HaloMassFunction(parameters,"sheth_tormen")
+    #plot halo mass function at target redshift
+    """plt.plot(M,n,label=f"{target_redshift}")
+    plt.plot(M,n2,label="15")
+    plt.plot(M,n3,label="20")
+    plt.ylim(1e-12,1e2)
+    plt.legend()
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel(r"$M_\odot$")
+    plt.ylabel(r"$\frac{dn}{dlnM}$")
+    plt.title(f"Halo mass function")
+    plt.show()"""
+    #need to reverse the order because M_BH is in decreasing halo mass
+    M_BH = np.flip(M_BH,0)
+    M_BH_dot = np.flip(M_BH_dot,0)
+    print(M_BH[:,-1])
+    for z in redshifts:
+
+
+        target_redshift = z
+        i_target = np.where(loader.redshifts==z)[0]
+
+        n   = hmf.dndlnm(halo_mass[:,0,i_target], z=target_redshift)
+
+        n_BH = np.full_like(n,0)
+        mask = np.where(M_BH_dot[:,i_target] >= 0.0)
+        n_BH[mask,0] = n[mask,0]*halo_mass_derivative[mask,0,i_target] / M_BH_dot[mask,i_target]  / halo_mass[mask,0,i_target] * M_BH[mask,i_target] 
+        #n_BH = n* M_BH[:,i_target]
+        #print(Mh)
+        plt.plot(M_BH[:,i_target],n_BH,label=f"z={target_redshift}")
+        #plt.plot(halo_mass[:,0,i_target],n,label=f"z={target_redshift}")
+        #plt.plot(halo_mass[:,0,i_target],n,label=f"halo mass at {target_redshift}")
+
+    plt.xlim(1e6,1e11)
+    plt.ylim(1e-8,1e-2)
+    #plt.xlim(1e1,1e10)
+    plt.legend()
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel(r"$M_\odot$")
+    plt.ylabel(r"$\frac{dn_{BH}}{dlnM_{BH}}$")
+    plt.title(f"BHMF for f0={parameters.source.f0}, Mseed={parameters.source.M_seed}, p={parameters.source.p_merge}, xi={parameters.source.xi}")
+    plt.show()
+
+def plot_BHMF_para(params,target_redshift):
+    M   = np.logspace(8, 15, 60)
+    halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
+    hmf = HaloMassFunction(parameters,"sheth_tormen")
+
+    i_target = np.where(loader.redshifts==target_redshift)[0]
+
+    #need to reverse the order because M_BH is in decreasing halo mass
+    
+    for para in params:
+        #change this
+        parameters.source.xi = para
+        M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
+        M_BH = np.flip(M_BH,0)
+        M_BH_dot = np.flip(M_BH_dot,0)
+
+        
+
+        n   = hmf.dndlnm(halo_mass[:,0,i_target], z=target_redshift)
+
+        n_BH = np.full_like(n,0)
+        mask = np.where(M_BH_dot[:,i_target] >= 0.0)
+        n_BH[mask,0] = n[mask,0]*halo_mass_derivative[mask,0,i_target] / M_BH_dot[mask,i_target]  / halo_mass[mask,0,i_target] * M_BH[mask,i_target] 
+
+        #change label
+        plt.plot(M_BH[:,i_target],n_BH,label=f"xi={para}")
+        
+
+    plt.xlim(1e1,1e12)
+    plt.legend()
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel(r"$M_\odot$")
+    plt.ylabel(r"$\frac{dn_{BH}}{dlnM_{BH}}$")
+    #change title
+    plt.title(f"BHMF for z={target_redshift}, p={parameters.source.p_merge}, f0={parameters.source.f0}, Mseed={parameters.source.M_seed}")
+    plt.show()
+
+def plot_MBH_Mstar(params,z):
+    M   = np.logspace(8, 15, 60)
+    halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
+    M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
+    Ob,Om = parameters.cosmology.Ob,parameters.cosmology.Om
+
+    M_star = (Ob / Om) * f_star_Halo(parameters, halo_mass) * halo_mass
+    i_target = np.where(loader.redshifts == z)
+    i2_target = np.where(loader.redshifts == z+3)
+    M_BH = np.flip(M_BH,0)
+    M_BH_dot = np.flip(M_BH_dot,0)
+    #plt.scatter(np.log10(M_star[:,0,i2_target]),np.log10(M_BH[:,i2_target]),color="red",label="Nick")
+
+    y_z9_on_x6 = np.interp(np.log10(M_star[:,0,i_target].squeeze()),np.log10(M_star[:,0,i2_target].squeeze()) ,np.log10(M_BH[:,i2_target].squeeze()))
+    plt.fill_between(np.log10(M_star[:,0,i_target].squeeze()), np.log10(M_BH[:,i_target].squeeze()), y_z9_on_x6, alpha=0.3,label="my code z=9-12")
+    plt.title(f"BHMF for f0={parameters.source.f0}, Mseed={parameters.source.M_seed}, p={parameters.source.p_merge}, xi={parameters.source.xi}")
 
 BH_params = {
     "f0": [0.0,0.1,0.3,0.5],
-    "M_seed": [100,300,800],
-    "p": [0.1,0.3,0.5,0.7,1.0],
-    "xi": [0.0,0.2,0.4,0.6]
+    "M_seed": [],
+    "p": [],
+    "xi": []
 }
 
-if __name__ == "__main__":
-    BH_multi_Z = main(BH_params)
+def claude_plot():
+    
+    import sys
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    
+    d = pd.read_csv(r"C:\Users\nick\Code\Thesis26\BEoRN\examples\mbh_mstar_9z12_digitized.csv", comment="#")
+    
+    fig, ax = plt.subplots(figsize=(5.5, 5.5))
+    x = np.linspace(6, 12, 50)
+    ax.plot(x, 8.69 + 1.17 * (x - 11), "k-", lw=1, label="Kormendy & Ho (2013)")
+    ax.plot(x, 7.45 + 1.05 * (x - 11), "k--", lw=1, label="Reines & Volonteri (2015)")
+    for off in (0, 1, 2):  # M_BH/M_* = 1, 0.1, 0.01
+        ax.plot(x, x - off, ":", c="darkred", lw=1)
+    
+    for name, c, lab in [("THESAN-ZOOM", "k", "THESAN-ZOOM"),
+                        ("TNG50_z0", "#221efc", "TNG50 (z=0)"),
+                        ("TNG50_z3", "#4b91fd", "TNG50 (z=3)")]:
+        s = d[d.dataset == name]
+        ax.plot(s.log_mstar, s.log_mbh, c=c, lw=2.5, label=lab)
+        e = s.dropna(subset=["log_mbh_lo"])
+        ax.errorbar(e.log_mstar, e.log_mbh,
+                    yerr=[e.log_mbh - e.log_mbh_lo, e.log_mbh_hi - e.log_mbh],
+                    fmt="none", ecolor=c, capsize=3, lw=1)
+    
+    s = d[d.dataset == "JWST_AGN"]
+    ax.scatter(s.log_mstar, s.log_mbh, s=40, c="#f7d624", ec="k", zorder=5, label="JWST AGN")
+    s = d[d.dataset == "QSO"]
+    ax.scatter(s.log_mstar, s.log_mbh, s=45, marker="^", c="grey", ec="k", zorder=5, label="QSOs")
+    
+    if len(sys.argv) > 1:
+        me = pd.read_csv(sys.argv[1])
+        ax.scatter(me.log_mstar, me.log_mbh, s=12, c="tab:green", alpha=0.6, zorder=4, label="this work")
 
-    plot_dTb_Powerspectrum_parameter(BH_multi_Z,BH_params,"M_seed")
+    plot_MBH_Mstar(parameters,9.0)
+    
+    ax.set(xlim=(6, 12), ylim=(4, 10),
+        xlabel=r"$\log_{10}(M_*\,[{\rm M_\odot}])$", ylabel=r"$\log_{10}(M_{\rm BH}\,[{\rm M_\odot}])$")
+    ax.text(6.2, 9.6, r"$9 < z < 12$")
+    ax.legend(fontsize=7, loc="lower right")
+    
+    plt.tight_layout()
+    
+    plt.show()
+
+if __name__ == "__main__":
+    #BH_multi_Z = main(BH_params)
+
+    #plot_light_cone(BH_multi_Z,3,"f0")
+    #plot_dTb_Powerspectrum_parameter(BH_multi_Z,BH_params,"f0")
+    #plot_BHMF_z([6.0,8.0,10.0,12.0])
+    #plot_BHMF_para([0.0,0.1,0.3,0.5,0.7],17)
+    claude_plot()
+    
+    
+

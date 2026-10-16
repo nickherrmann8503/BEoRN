@@ -54,12 +54,12 @@ parameters.source.alpha_fallback          = 'mean'  # fallback for halos not in 
 # Widen this range if you want to paint multiple snapshots.
 parameters.solver.redshifts                 = np.arange(20.0, 5.5, -0.5)
 parameters.solver.halo_mass_accretion_alpha = np.array([0.785, 0.795]) # 25 bins, 0–5
-parameters.solver.halo_mass_bin_min         = 1.3e10 
+parameters.solver.halo_mass_bin_min         = 1.3e10
 # Upper limit must cover the most massive halo in the box at every snapshot.
 # At z≈7.4 in THESAN-DARK 2 the most massive halos reach ~a few × 10¹³ M☉;
 # halos above this limit fall outside all profile bins and raise an AssertionError.
-parameters.solver.halo_mass_bin_max         = 2e11
-parameters.solver.halo_mass_nbin            = 2
+parameters.solver.halo_mass_bin_max         = 1e15
+parameters.solver.halo_mass_nbin            = 50
 
 ## Cosmology (Planck 2015, matching THESAN)
 parameters.cosmology.Om  = 0.31
@@ -73,7 +73,7 @@ parameters.source.halo_mass_min = 1e4
 parameters.source.g1 = 0.49
 parameters.source.g2 = -0.61
 parameters.source.g3 = 1.4
-parameters.source.g4 = 0
+parameters.source.g4 = -4
 parameters.source.Mp = 2.5e11/0.68
 parameters.source.Mt = 1e8
 
@@ -83,7 +83,7 @@ parameters.source.energy_cutoff_max_xray = 2000
 parameters.source.energy_min_sed_xray    = 200
 parameters.source.energy_max_sed_xray    = 2000
 parameters.source.alS_xray               = 1.5
-parameters.source.xray_normalisation     = 0.3 * 3.4e40
+parameters.source.xray_normalisation     = 3.4e40
 
 # Lyman-alpha
 parameters.source.n_lyman_alpha_photons = 9690
@@ -93,21 +93,34 @@ parameters.source.Nion    = 15000
 parameters.source.f0_esc  = 0.2
 parameters.source.pl_esc  = 0
 
+#Black holes
+default_p = 1.0
+default_xi = 0.3
+default_f0 = 0.5
+default_Mseed = 100
+
+parameters.source.IMBH_factor = 1.0
+parameters.source.HMXB_factor = 1.0
+parameters.source.p_merge = default_p
+parameters.source.xi = default_xi
+parameters.source.f0 = default_f0
+parameters.source.M_seed = default_Mseed
+
 start_time = time.time()
 #Artificial halo catalog
 cache_handler = beorn.io.Handler(CACHE_ROOT)
 loader = beorn.load_input_data.ArtificialHaloLoader(
     parameters,
-    halo_count = 1,
+    halo_count = 100,
 )
 
 
 #Compute radial profiles
-solvermain = beorn.precomputation.RadiationProfileSolver(parameters, loader.redshifts)
+"""solvermain = beorn.precomputation.RadiationProfileSolver(parameters, loader.redshifts)
 profiles = solvermain.get_or_compute_profiles(cache_handler,force_recompute=True)
 mass_index = parameters.solver.halo_mass_nbin // 2
 print(parameters.solver.halo_mass_bins)
-print(f"Mass bin {mass_index}: {parameters.solver.halo_mass_bins[mass_index]:e}")
+print(f"Mass bin {mass_index}: {parameters.solver.halo_mass_bins[mass_index]:e}")"""
 profile_redshifts = [13.0, 9.5, 6]
 # Show three α values to highlight the impact of different accretion rates
 profile_alphas = [ 0.79 ]
@@ -196,7 +209,7 @@ def plot_temperature_profile(parameters: Parameters, profiles: RadiationProfiles
             
 def parameter_comparison_temperature(redshifts,cache_handler,test_params):
     #change this
-    param = "M_seed"
+    param = "f0"
     if len(test_params) == 0:
         parameters.source.HMXB_factor = 0.0
         parameters.source.IMBH_factor = 0.0
@@ -218,7 +231,7 @@ def parameter_comparison_temperature(redshifts,cache_handler,test_params):
         line_styles = ["-","--","-.",":"]
         for i,p in enumerate(test_params):
             #change this
-            parameters.source.M_seed = p
+            parameters.source.f0 = p
             solvermain = beorn.precomputation.RadiationProfileSolver(parameters, redshifts)
             profiles = solvermain.get_or_compute_profiles(cache_handler,force_recompute=True)
             mass_index = parameters.solver.halo_mass_nbin // 2
@@ -230,7 +243,7 @@ def parameter_comparison_temperature(redshifts,cache_handler,test_params):
                 alphas=profile_alphas,
                 mass_index = -1,
                 line_style=line_styles[i],
-                label = f"f0={p}",
+                label = f"Mseed={p}",
                 no_BH=False
             )
         handles = [
@@ -252,12 +265,12 @@ parameter_comparison_temperature(loader.redshifts,cache_handler,[])
 f0s = [0.0,0.1,0.3,0.5]
 Mseeds = [50,100,300,800]
 ps = [0.0,0.1,0.3,1.0]
-xis = [0.0,0.5,0.7,0.9]
-parameter_comparison_temperature(loader.redshifts,cache_handler,Mseeds)
+xis = [0.03,0.1,0.3,0.4]
+parameter_comparison_temperature(loader.redshifts,cache_handler,f0s)
 plt.legend(loc="center right")
 plt.title(f"Temperature profiles with f0={parameters.source.f0},p={parameters.source.p_merge},xi={parameters.source.xi}")
 plt.xlim(2e-2, 1e2)
-plt.ylim(0.8, 1e5)
+plt.ylim(0.8, 1e7)
 plt.xlabel('r [cMpc]')
 plt.ylabel(r'$T_k$ [K]')
 plt.tick_params(axis='both')

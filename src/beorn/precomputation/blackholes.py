@@ -120,17 +120,17 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
 
     #solve seeding equation for every halo
     z_seeds = np.array([z_seed(m,Mseed,parameters) for m in Mh])
-    
     Dz = np.abs(zn[1]-zn[0])
     
     #initiate array
     M_BH = np.zeros((len(Mh),len(zn)))
     M_BH_dot = np.zeros((len(Mh),len(zn)))
-    print(Mh,z_seeds)
+
     #seeding 
     for i,zseed in enumerate(z_seeds):
         index = np.digitize(zseed,zn)
-        M_BH[i][index] = Mseed
+        if index != len(zn):
+            M_BH[i][index] = Mseed
     
     #loop through z bins
     for n in range(1,len(zn)):
@@ -150,7 +150,7 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
             
             #add both contributions
             delta_M = gas_accr+ mergers
-
+            
             #add them times the redshift step
             M_BH[l][n] += delta_M * Dz
 

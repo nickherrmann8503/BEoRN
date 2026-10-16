@@ -1,0 +1,76 @@
+# Digitized: middle panel (6 < z < 9) of the THESAN-ZOOM M_BH - M_* figure
+# Method: axis calibrated from the panel frame (x 6-12, y 4-10; ~88 px/dex); points located by colour-mask centroids,
+#   lines and error bars traced by exact line colour and checked by zoomed overlay. Accuracy ~0.02 dex (points), ~0.03 dex (lines/bars).
+# Columns: dataset, log10(M_*/Msun), log10(M_BH/Msun) [median line value or point], error-bar ends lo/hi (blank if none), note
+# TNG50 bars are plotted with small x offsets in the original (z=0: +0.05, z=3: -0.05); x values here are the plotted positions.
+# THESAN-ZOOM shaded 2D density contours are NOT included.
+# Reference relations (not digitized, analytic): Kormendy & Ho 2013: log M_BH = 8.69 + 1.17 (log M_* - 11)
+#   Reines & Volonteri 2015: log M_BH = 7.45 + 1.05 (log M_* - 11); dotted lines: M_BH/M_* = 1, 0.1, 0.01
+dataset,log_mstar,log_mbh,log_mbh_lo,log_mbh_hi,note
+THESAN-ZOOM,6.00,5.40,,,line start (no bar)
+THESAN-ZOOM,6.25,5.62,5.24,6.05,
+THESAN-ZOOM,6.75,5.94,5.53,6.35,
+THESAN-ZOOM,7.25,6.31,5.90,6.74,
+THESAN-ZOOM,7.75,6.68,6.28,7.08,
+THESAN-ZOOM,8.25,7.05,6.65,7.49,
+THESAN-ZOOM,8.75,7.47,7.11,7.98,
+THESAN-ZOOM,9.25,7.89,7.42,8.45,lower cap hidden behind points; lo is a lower bound on the bar length
+THESAN-ZOOM,9.75,8.10,7.82,8.40,line ends here
+TNG50_z0,7.30,6.00,5.64,6.30,
+TNG50_z0,7.80,6.06,5.71,6.41,
+TNG50_z0,8.30,6.28,5.91,6.67,
+TNG50_z0,8.80,6.74,6.50,7.20,
+TNG50_z0,9.30,7.12,6.70,7.50,
+TNG50_z0,9.80,7.60,7.26,7.99,
+TNG50_z0,10.30,8.07,7.76,8.42,
+TNG50_z0,10.80,8.62,8.26,8.99,
+TNG50_z0,11.30,9.25,8.91,9.59,line ends here
+TNG50_z3,7.19,6.30,5.93,6.69,
+TNG50_z3,7.69,6.56,6.18,6.95,
+TNG50_z3,8.21,6.88,6.48,7.29,
+TNG50_z3,8.70,7.25,6.84,7.65,
+TNG50_z3,9.21,7.50,7.19,7.99,
+TNG50_z3,9.71,7.78,7.42,8.26,line ends here
+JWST_AGN,7.79,7.14,,,
+JWST_AGN,7.87,6.87,,,
+JWST_AGN,8.04,7.31,,,
+JWST_AGN,8.11,7.22,,,
+JWST_AGN,8.12,6.57,,,
+JWST_AGN,8.14,7.49,,,
+JWST_AGN,8.34,7.36,,,
+JWST_AGN,8.38,6.82,,,
+JWST_AGN,8.45,7.25,,,
+JWST_AGN,8.63,7.45,,,
+JWST_AGN,8.70,8.16,,,
+JWST_AGN,8.82,6.38,,,
+JWST_AGN,8.88,7.49,,,joined by dashed line to 8.88/5.66 (same object two estimates)
+JWST_AGN,8.88,5.66,,,joined by dashed line to 8.88/7.49
+JWST_AGN,8.92,8.59,,,
+JWST_AGN,8.94,7.30,,,
+JWST_AGN,9.01,7.61,,,
+JWST_AGN,9.10,6.20,,,
+JWST_AGN,9.10,6.61,,,
+JWST_AGN,9.14,7.63,,,
+JWST_AGN,9.15,7.48,,,
+JWST_AGN,9.35,7.56,,,
+JWST_AGN,9.36,7.01,,,
+JWST_AGN,9.52,8.20,,,
+JWST_AGN,9.58,7.69,,,
+JWST_AGN,9.61,7.99,,,
+JWST_AGN,9.78,7.70,,,joined by dashed line to 9.78/6.18
+JWST_AGN,9.78,6.18,,,joined by dashed line to 9.78/7.70
+JWST_AGN,9.92,7.24,,,
+JWST_AGN,10.18,7.68,,,joined by dashed line to 10.18/6.30
+JWST_AGN,10.18,6.30,,,joined by dashed line to 10.18/7.68
+JWST_AGN,10.60,8.70,,,
+JWST_AGN,10.65,7.89,,,
+QSO,9.81,9.06,,,
+QSO,9.99,9.16,,,
+QSO,10.10,8.79,,,
+QSO,10.14,9.08,,,
+QSO,10.30,9.83,,,
+QSO,10.35,9.29,,,
+QSO,10.41,9.39,,,
+QSO,10.49,8.29,,,
+QSO,10.73,9.88,,,
+QSO,11.10,9.08,,,

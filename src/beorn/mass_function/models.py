@@ -187,7 +187,7 @@ class HaloMassFunction(MassFunction):
         from beorn.mass_function import HaloMassFunction
         from beorn.structs import Parameters
         import numpy as np
-
+        
         param = Parameters()
         hmf = HaloMassFunction(param)                   # ST, tophat, numpy
         M   = np.logspace(8, 14, 60)
