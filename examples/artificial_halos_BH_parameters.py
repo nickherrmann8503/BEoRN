@@ -16,14 +16,20 @@
 # **Output:** Intermediate cached results are written to `./cache/` and final grids to `./output/`. Both are created automatically.
 
 # %%
+import sys
 import numpy as np
-from pathlib import Path
+import pandas as pd
 import matplotlib.pyplot as plt
+import corner
+from pathlib import Path
+from matplotlib.colors import LogNorm
 import matplotlib.gridspec as gridspec
 from beorn.precomputation.blackholes import black_hole_mass_iterative,stellar_seed_mass_eq
 from beorn.mass_function import HaloMassFunction
 from beorn.precomputation.massaccretion import mass_accretion
 from beorn.astro import f_star_Halo
+from scipy.interpolate import interp1d
+from time import time
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -85,7 +91,7 @@ parameters.source.energy_cutoff_max_xray = 2000
 parameters.source.energy_min_sed_xray = 500
 parameters.source.energy_max_sed_xray = 2000
 parameters.source.alS_xray = 1.5
-parameters.source.xray_normalisation = 3.4e40 * 3
+parameters.source.xray_normalisation = 3.4e40*3
 
 # fesc
 parameters.source.f0_esc = 0.2
@@ -107,9 +113,9 @@ parameters.source.n_lyman_alpha_photons = 9690
 parameters.source.halo_mass_min = 1e4
 
 #Black holes
-default_p = 0.0
+default_p = 1.0
 default_xi = 0.3
-default_f0 = 1.0
+default_f0 = 0.1 
 default_Mseed = 100
 
 parameters.source.IMBH_factor = 1.0
@@ -347,14 +353,14 @@ def plot_dTb_Powerspectrum_parameter(BH_multi_z,BH_parameters,param = "f0"):
     beorn.plotting.draw_dTb_power_spectrum_of_z(ax4, default, parameters,color= "black",label= f"no BH")
     beorn.plotting.draw_Temp_signal(ax2, default,color= "black",label= f"no BH")
     beorn.plotting.draw_xHII_signal(ax3, default,color= "black",label= f"no BH")
-          
+    
 
     for i in range(len(BH_parameters[param])):
         beorn.plotting.draw_dTb_signal(ax1, BH_multi_z[param][i],color= colors[i],label= f"{param}={BH_parameters[param][i]}")
         beorn.plotting.draw_Temp_signal(ax2, BH_multi_z[param][i],color= colors[i],label= f"{param}={BH_parameters[param][i]}")
         beorn.plotting.draw_xHII_signal(ax3, BH_multi_z[param][i],color= colors[i],label= f"{param}={BH_parameters[param][i]}")
         beorn.plotting.draw_dTb_power_spectrum_of_z(ax4, BH_multi_z[param][i], parameters,color= colors[i],label= f"{param}={BH_parameters[param][i]}")
-    
+    ax4.set_ylim(1e-4,1e2)
     plt.legend()
     plt.show()
 
@@ -372,7 +378,7 @@ def plot_light_cone(BH_multi_z,i,param):
     beorn.plotting.plot_lightcone(lightcone, ax, "", slice_number=80)
     plt.show()
 
-def plot_BHMF_z(redshifts):
+def plot_BHMF_z(redshifts,parameters):
     M   = np.logspace(8, 15, 60)
     halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
     M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
@@ -392,26 +398,32 @@ def plot_BHMF_z(redshifts):
     #need to reverse the order because M_BH is in decreasing halo mass
     M_BH = np.flip(M_BH,0)
     M_BH_dot = np.flip(M_BH_dot,0)
-    print(M_BH[:,-1])
-    for z in redshifts:
+    n_BH = np.full((len(redshifts),60,1),0.0)
 
+    for i in range(len(redshifts)):
 
+        z = redshifts[i]
         target_redshift = z
         i_target = np.where(loader.redshifts==z)[0]
 
         n   = hmf.dndlnm(halo_mass[:,0,i_target], z=target_redshift)
-
-        n_BH = np.full_like(n,0)
-        mask = np.where(M_BH_dot[:,i_target] >= 0.0)
-        n_BH[mask,0] = n[mask,0]*halo_mass_derivative[mask,0,i_target] / M_BH_dot[mask,i_target]  / halo_mass[mask,0,i_target] * M_BH[mask,i_target] 
+        #n_BH = np.full_like(n,0)
+        mask = np.where(M_BH_dot[:,i_target] > 0.0)
+        n_BH[i,mask,0] = n[mask,0]*halo_mass_derivative[mask,0,i_target] / M_BH_dot[mask,i_target]  / halo_mass[mask,0,i_target] * M_BH[mask,i_target] 
+        if n_BH[i,0,0] == np.inf:
+            n_BH[i,0,0] = 0
         #n_BH = n* M_BH[:,i_target]
         #print(Mh)
-        plt.plot(M_BH[:,i_target],n_BH,label=f"z={target_redshift}")
+        #print(M_BH[:,i_target],n_BH[i])
+        #plt.plot(M_BH[:,i_target],n_BH[i],label=f"z={target_redshift}",linestyle=ls)
         #plt.plot(halo_mass[:,0,i_target],n,label=f"z={target_redshift}")
         #plt.plot(halo_mass[:,0,i_target],n,label=f"halo mass at {target_redshift}")
-
-    plt.xlim(1e6,1e11)
-    plt.ylim(1e-8,1e-2)
+        """plt.scatter(M_BH[mask,i_target],n_BH[i,mask,0])#M_BH[mask,i_target]*M_BH_dot[mask,i_target])
+        plt.yscale("log")
+        plt.xscale("log")
+        plt.show()"""
+    """plt.xlim(1e1,1e9)
+    plt.ylim(1e-6,1e2)
     #plt.xlim(1e1,1e10)
     plt.legend()
     plt.xscale("log")
@@ -419,7 +431,9 @@ def plot_BHMF_z(redshifts):
     plt.xlabel(r"$M_\odot$")
     plt.ylabel(r"$\frac{dn_{BH}}{dlnM_{BH}}$")
     plt.title(f"BHMF for f0={parameters.source.f0}, Mseed={parameters.source.M_seed}, p={parameters.source.p_merge}, xi={parameters.source.xi}")
-    plt.show()
+""" 
+    
+    return n_BH,M_BH[:,i_target].squeeze()
 
 def plot_BHMF_para(params,target_redshift):
     M   = np.logspace(8, 15, 60)
@@ -459,10 +473,26 @@ def plot_BHMF_para(params,target_redshift):
     plt.title(f"BHMF for z={target_redshift}, p={parameters.source.p_merge}, f0={parameters.source.f0}, Mseed={parameters.source.M_seed}")
     plt.show()
 
-def plot_MBH_Mstar(params,z):
-    M   = np.logspace(8, 15, 60)
+def compute_MBH_MSTAR(params):
+    M   = np.logspace(8, 15, 50) 
     halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
     M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
+    
+    Ob,Om = parameters.cosmology.Ob,parameters.cosmology.Om
+
+    M_star = (Ob / Om) * f_star_Halo(parameters, halo_mass) * halo_mass
+    i_target = np.where(loader.redshifts == 7.5)
+    i2_target = np.where(loader.redshifts == 9.0)
+    M_BH = np.flip(M_BH,0)
+    M_BH_dot = np.flip(M_BH_dot,0)
+    return M_star[:,0,i_target],M_BH[:,i_target]
+
+def plot_MBH_Mstar(params,z):
+    M   = np.logspace(8, 15, 50)
+    start=time()
+    halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
+    M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
+    print(time()-start)
     Ob,Om = parameters.cosmology.Ob,parameters.cosmology.Om
 
     M_star = (Ob / Om) * f_star_Halo(parameters, halo_mass) * halo_mass
@@ -472,12 +502,13 @@ def plot_MBH_Mstar(params,z):
     M_BH_dot = np.flip(M_BH_dot,0)
     #plt.scatter(np.log10(M_star[:,0,i2_target]),np.log10(M_BH[:,i2_target]),color="red",label="Nick")
 
-    y_z9_on_x6 = np.interp(np.log10(M_star[:,0,i_target].squeeze()),np.log10(M_star[:,0,i2_target].squeeze()) ,np.log10(M_BH[:,i2_target].squeeze()))
-    plt.fill_between(np.log10(M_star[:,0,i_target].squeeze()), np.log10(M_BH[:,i_target].squeeze()), y_z9_on_x6, alpha=0.3,label="my code z=9-12")
+    f_inter = interp1d(M_star[:,0,i2_target].squeeze(),M_BH[:,i2_target].squeeze(),kind="cubic", fill_value="extrapolate")
+    plt.fill_between(np.log10(M_star[:,0,i_target].squeeze()), np.log10(M_BH[:,i_target].squeeze()), np.log10(f_inter(M_star[:,0,i_target].squeeze())), alpha=0.3,label="my code z=9-12")
     plt.title(f"BHMF for f0={parameters.source.f0}, Mseed={parameters.source.M_seed}, p={parameters.source.p_merge}, xi={parameters.source.xi}")
-
+    #print(np.log10(M_BH[:,i_target].squeeze()), y_z9_on_x6,np.log10(M_star[:,0,i2_target].squeeze()))
+    
 BH_params = {
-    "f0": [0.0,0.1,0.3,0.5],
+    "f0": [1.0],
     "M_seed": [],
     "p": [],
     "xi": []
@@ -485,12 +516,9 @@ BH_params = {
 
 def claude_plot():
     
-    import sys
-    import numpy as np
-    import pandas as pd
-    import matplotlib.pyplot as plt
     
-    d = pd.read_csv(r"C:\Users\nick\Code\Thesis26\BEoRN\examples\mbh_mstar_9z12_digitized.csv", comment="#")
+    
+    d = pd.read_csv(r"C:\Users\nick\Code\Thesis26\BEoRN\examples\mbh_mstar_6z9_digitized.csv", comment="#")
     
     fig, ax = plt.subplots(figsize=(5.5, 5.5))
     x = np.linspace(6, 12, 50)
@@ -518,24 +546,169 @@ def claude_plot():
         me = pd.read_csv(sys.argv[1])
         ax.scatter(me.log_mstar, me.log_mbh, s=12, c="tab:green", alpha=0.6, zorder=4, label="this work")
 
-    plot_MBH_Mstar(parameters,9.0)
+    plot_MBH_Mstar(parameters,6.0)
     
     ax.set(xlim=(6, 12), ylim=(4, 10),
         xlabel=r"$\log_{10}(M_*\,[{\rm M_\odot}])$", ylabel=r"$\log_{10}(M_{\rm BH}\,[{\rm M_\odot}])$")
-    ax.text(6.2, 9.6, r"$9 < z < 12$")
+    ax.text(6.2, 9.6, r"$6 < z < 9$")
     ax.legend(fontsize=7, loc="lower right")
     
     plt.tight_layout()
     
     plt.show()
 
+def log_prior(theta):
+    f0,Mseed,p,xi = theta
+    if 0<f0<1 and 50< Mseed <1000 and 0<p<1 and 0<xi<1:
+        return 0.0
+    return -np.inf
+
+def parameters_from(theta,parameters):
+    parameters.source.f0 = theta[0]
+    parameters.source.M_seed = theta[1]
+    parameters.source.p_merge = theta[2]
+    parameters.source.xi = theta[3]
+    return parameters
+
+def log_likelyhood(theta,M_BH_obs,M_star_obs,sigma_y,parameters):
+    prior = log_prior(theta)
+    if not np.isfinite(prior):
+        return -np.inf
+    parameters = parameters_from(theta,parameters)
+    #returns calculated MBH and MSTAR at redshift 7.5 for every halo
+    M_BH,M_star = compute_MBH_MSTAR(parameters)
+    M_star,M_BH = M_star.squeeze(),M_BH.squeeze()
+    
+    f = interp1d(M_star,M_BH,kind="linear",
+                 bounds_error=False)
+    M_BH_sim = f(M_star_obs)
+    return prior-0.5 * np.sum(((M_BH_obs-M_BH_sim)/sigma_y)**2)
+                            
+
+def mcmc(parameters):
+    #get jwst data
+    d = pd.read_csv(r"C:\Users\nick\Code\Thesis26\BEoRN\examples\mbh_mstar_6z9_digitized.csv", comment="#")
+    s = d[d.dataset == "JWST_AGN"]
+    M_star_obs,M_BH_obs = s.log_mstar, s.log_mbh
+    sigma_x,sigma_y = np.full_like(M_BH_obs,1.0),np.full_like(M_BH_obs,1.0)
+    #try to do mcmc on jwst data
+    import emcee
+    ndim = 4
+    nwalkers = 32
+    p0 = np.array([1.0,900,1.0,0.0])+1e-3 * np.random.randn(nwalkers,ndim)
+    from multiprocessing import Pool
+    with Pool() as pool:
+        sampler = emcee.EnsembleSampler(nwalkers,ndim,log_likelyhood,args=(M_star_obs,M_BH_obs,sigma_y,parameters),pool=pool)
+        sampler.run_mcmc(p0,5000,progress=True)
+
+    tau = sampler.get_autocorr_time(tol=0)
+    samples = sampler.get_chain(discard=int(3*tau.max()), thin=int(tau.max()/2), flat=True)
+    print(tau)
+    print(samples)
+
+    #claude
+    labels = ["f0", "Mseed", "p","xi"] 
+    chain = sampler.get_chain()              # shape (steps, walkers, ndim)
+    fig, axes = plt.subplots(len(labels), 1, sharex=True, figsize=(8, 2*len(labels)))
+    for i, ax in enumerate(axes):
+        ax.plot(chain[:, :, i], "k", alpha=0.3)
+        ax.set_ylabel(labels[i])
+    axes[-1].set_xlabel("step")
+
+    # 2. Discard burn-in and thin, using the autocorrelation time
+    tau = sampler.get_autocorr_time(tol=0)
+    samples = sampler.get_chain(discard=int(3*tau.max()), thin=max(1, int(tau.max()/2)), flat=True)
+
+    # 3. Corner plot
+    corner.corner(samples, labels=labels, quantiles=[0.16, 0.5, 0.84],
+                show_titles=True, title_fmt=".3f")
+
+    # 4. Parameter estimates: median with 68% interval
+    for i, name in enumerate(labels):
+        lo, med, hi = np.percentile(samples[:, i], [16, 50, 84])
+        print(f"{name} = {med:.4f} +{hi-med:.4f} -{med-lo:.4f}")
+
+    # 5. Posterior predictive check: model curves from random posterior draws over the data
+    plt.figure()
+    for theta in samples[np.random.randint(len(samples), size=100)]:
+        parameters = parameters_from(theta,parameters)
+        M_BH,M_star = compute_MBH_MSTAR(parameters)
+        M_star,M_BH = M_star.squeeze(),M_BH.squeeze()
+        x_sim, y_sim = M_star,M_BH
+        plt.plot(x_sim, y_sim, "C1", alpha=0.1)
+    plt.errorbar(M_star_obs, M_BH_obs, yerr=sigma_y, fmt="o", color="k")
+    plt.xlabel("x"); plt.ylabel("y")
+    plt.show()
+
 if __name__ == "__main__":
+
+    #
     #BH_multi_Z = main(BH_params)
 
+    #Light cones
     #plot_light_cone(BH_multi_Z,3,"f0")
+
+    #Power spectrum plots
     #plot_dTb_Powerspectrum_parameter(BH_multi_Z,BH_params,"f0")
-    #plot_BHMF_z([6.0,8.0,10.0,12.0])
+
+    #Scatter plots
+    """parameters.source.p_merge = 0.5
+    #parameters.source.f0 = 0.5
+    no_scatter_n,M_BH = plot_BHMF_z([6.0],parameters)
+    #now with scatter
+    #parameters.source.f0_sig = 0.1
+    parameters.source.p_merge_sig = 0.3
+    scatters = []
+    mean_M = np.full((len(M_BH)),0.0)
+    mean_n = np.full((len(M_BH)),0.0)
+    diff = np.full((len(M_BH)),0.0)
+    Nit = 20
+    xs = []
+    ys = []
+
+    for n in range(Nit):
+        print(n)
+        scatters.append(plot_BHMF_z([6.0],parameters))
+        #plt.plot(scatters[n][1],scatters[n][0][0,:,0],linestyle="--")
+        mean_M += scatters[n][1]
+        mean_n += scatters[n][0][0,:,0]
+        print(scatters[n][0][0,:,0])
+        print(scatters[n][1])
+        xs = np.concatenate([xs,scatters[n][1]])
+        ys = np.concatenate([ys,scatters[n][0][0,:,0]])
+    print(xs.max(),xs.min())
+    print(ys.max(),ys.min())
+    xbins = np.logspace(np.log10(xs.min()), np.log10(xs.max()), 20)
+    ybins = np.logspace(np.log10(ys.min()+0.01), np.log10(ys.max()), 20)
+    print(xbins)
+    H, xe, ye = np.histogram2d(xs, ys,bins=[xbins, ybins])
+    #H = H / H.sum(axis=1, keepdims=True)
+    plt.scatter(xs,ys,s=2,alpha=0.3)
+    #points from one halo mass bin 10
+    x_halo,y_halo = [scatters[l][1][-20] for l in range(Nit)],[scatters[l][0][0,-20,0] for l in range(Nit)]
+    #plt.scatter(x_halo,y_halo,s=3,alpha=0.3)
+    #plt.ylim(1e-20,1e3)
+
+
+    mean_M /= Nit
+    mean_n /= Nit
+    plt.plot(mean_M,mean_n,label="mean scattered")
+    plt.plot(M_BH,no_scatter_n[0,:,0],label="no scatter")
+    plt.legend()
+    plt.xlabel(r"$M_{BH}[M_\odot]$")
+    plt.ylabel(r"$\frac{dn_{BH}}{dlnM_{BH}}(Mpc/h)^{-3}$")
+    plt.yscale("log")
+    plt.xscale("log")
+    plt.title("z=6,f0=0.1, Mseed=100, xi=0.3")
+    plt.show()"""
+
+    #mcmc(parameters)
+
+    #plt.title(f"BHMF for f0={parameters.source.f0}, Mseed={parameters.source.M_seed}, p={parameters.source.p_merge}, xi={parameters.source.xi} and f0 scatter {0.05}")
+    #plt.show()
+    
     #plot_BHMF_para([0.0,0.1,0.3,0.5,0.7],17)
+    parameters= parameters_from([0.5,533,0.5,0.5],parameters)
     claude_plot()
     
     

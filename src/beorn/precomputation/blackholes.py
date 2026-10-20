@@ -10,6 +10,9 @@ from scipy.optimize import brentq
 from scipy.integrate import quad,cumulative_trapezoid,trapezoid
 import matplotlib.pyplot as plt
 
+#seed random
+rng = np.random.default_rng(seed=0)
+
 #beorn
 from ..cosmo import Hubble #Hubble parameter [yr-1]
 from ..astro import f_star_Halo
@@ -96,10 +99,23 @@ def p_merge(Mh,Mp,xi,p):
     else:
         return 0.0
 
+def get_scattered_parameters(parameters,N):
+
+    f0s = rng.normal(parameters.source.f0,parameters.source.f0_sig,N)
+    f0s = np.maximum(f0s,0)
+    Mseeds = rng.normal(parameters.source.M_seed,parameters.source.M_seed_sig,N)
+    Mseeds = np.maximum(Mseeds,0)
+    ps = rng.normal(parameters.source.p_merge,parameters.source.p_merge_sig,N)
+    ps = np.maximum(ps,0)
+    xis = rng.normal(parameters.source.xi,parameters.source.xi_sig,N)
+    xis = np.maximum(xis,0)
+
+    return f0s,Mseeds,ps,xis
 
 
-def black_hole_mass_iterative(zn,Mh0,parameters):
-    """Compute the black hole mass evolution for different halo mass and redshift bins
+
+"""def black_hole_mass_iterative(zn,Mh0,parameters):
+    Compute the black hole mass evolution for different halo mass and redshift bins
     
     Args:
         zn (np.ndarray): redshift bins
@@ -108,7 +124,7 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
     Returns:
         numpy.ndarray: Black Hole mass growth in redshift and descendant halo mass bins
         shape (len(Mh0),len(zn))
-    """
+
     #parameters
     Mseed = parameters.source.M_seed
     f0 = parameters.source.f0
@@ -125,7 +141,7 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
     #initiate array
     M_BH = np.zeros((len(Mh),len(zn)))
     M_BH_dot = np.zeros((len(Mh),len(zn)))
-
+    #print(z_seeds)
     #seeding 
     for i,zseed in enumerate(z_seeds):
         index = np.digitize(zseed,zn)
@@ -147,6 +163,75 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
             for i in range(len(Mh)-1,l,-1):
                 
                 mergers +=  np.abs((Mh[i]-Mh[i-1]))/Mh[l]*dN_dzdMp(Mh[l],Mh[i],zn[n]) * M_BH[i][n] * p_merge(Mh[l],Mh[i],xi,p)
+            
+            #add both contributions
+            delta_M = gas_accr+ mergers
+            
+            #add them times the redshift step
+            M_BH[l][n] += delta_M * Dz
+
+            #save change
+            M_BH_dot[l][n] += delta_M * dzdt(zn[n],parameters)
+
+    return M_BH,M_BH_dot,Mh"""
+
+def black_hole_mass_iterative(zn,Mh0,parameters):
+    #NOW WITH SCATTER
+    """Compute the black hole mass evolution for different halo mass and redshift bins
+    
+    Args:
+        zn (np.ndarray): redshift bins
+        Mh0 (np.ndarray): descendent halo masses
+
+    Returns:
+        numpy.ndarray: Black Hole mass growth in redshift and descendant halo mass bins
+        shape (len(Mh0),len(zn))
+    """
+    #parameters
+    Mseed = parameters.source.M_seed
+    f0 = parameters.source.f0
+    p = parameters.source.p_merge
+    xi = parameters.source.xi
+    if isinstance(Mh0,np.ndarray):
+        f0s,Mseeds,ps,xis = get_scattered_parameters(parameters,Mh0.size)
+    elif isinstance(Mh0,list):
+        f0s,Mseeds,ps,xis = get_scattered_parameters(parameters,len(Mh0))
+    else:
+        f0s,Mseeds,ps,xis = get_scattered_parameters(parameters,1)
+    
+
+    Mh = np.sort(Mh0)
+    Mh = Mh[::-1]
+
+    #solve seeding equation for every halo
+    z_seeds = np.array([z_seed(Mh[i],Mseeds[i],parameters) for i in range(len(Mh))])
+    Dz = np.abs(zn[1]-zn[0])
+    
+    #initiate array
+    M_BH = np.zeros((len(Mh),len(zn)))
+    M_BH_dot = np.zeros((len(Mh),len(zn)))
+    #print(z_seeds)
+    #seeding 
+    for i,zseed in enumerate(z_seeds):
+        index = np.digitize(zseed,zn)
+        if index != len(zn):
+            M_BH[i][index] = Mseeds[i]
+    
+    #loop through z bins
+    for n in range(1,len(zn)):
+        #loop through M bins
+        for l in range(len(Mh)-1,-1,-1):
+
+            M_BH[l][n] += M_BH[l][n-1]
+
+            #eddington accretion from the previous z bin
+            gas_accr = A*duty_cycle(M_BH[l][n-1],f0s[l],0)*M_BH[l][n-1]*dtdz(zn[n],parameters)
+
+            #mergers from smaller mass halos
+            mergers = 0.0
+            for i in range(len(Mh)-1,l,-1):
+                
+                mergers +=  np.abs((Mh[i]-Mh[i-1]))/Mh[l]*dN_dzdMp(Mh[l],Mh[i],zn[n]) * M_BH[i][n] * p_merge(Mh[l],Mh[i],xis[l],ps[l])
             
             #add both contributions
             delta_M = gas_accr+ mergers

@@ -159,14 +159,22 @@ class SourceParameters:
     M_seed: float = 100.0
     """Mass at which BH is seeded when total stellar mass in a halo equals M_seed"""
 
+    M_seed_sig: float  = 0
+
     f0: float = 0.1
     """Eddington accretion duty cycle, parametrizes eddington efficiency"""
+
+    f0_sig: float = 0
 
     p_merge: float = 0.3
     """Probability that two BHs merge if their halos merge"""
 
+    p_merge_sig: float = 0
+
     xi: float = 0.5
     """Ratio above which two BH can merge with probability p"""
+
+    xi_sig: float = 0
 
     descendant_halo_mass_min: float = 1e8
     """minimum descendant halo mass for the iterative BH evolution"""
@@ -174,6 +182,8 @@ class SourceParameters:
     N_descendant_halo_mass_bins: int = 21
     """number of descendant halo mass bins between descendant halo mass minimum and target halo mass. 
     Higher number smoothes out the discreet mergers"""
+
+
 
     HMXB_factor: float = 0.0
     """allows to test the contribution of high mass ratio binary on profiles"""
