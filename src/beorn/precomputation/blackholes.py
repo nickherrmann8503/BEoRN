@@ -9,6 +9,7 @@ import numpy as np
 from scipy.optimize import brentq
 from scipy.integrate import quad,cumulative_trapezoid,trapezoid
 import matplotlib.pyplot as plt
+from time import time
 
 #seed random
 rng = np.random.default_rng(seed=0)
@@ -176,7 +177,7 @@ def get_scattered_parameters(parameters,N):
     return M_BH,M_BH_dot,Mh"""
 
 def black_hole_mass_iterative(zn,Mh0,parameters):
-    #NOW WITH SCATTER
+    #NOW WITH SCATTER and hopefully faster
     """Compute the black hole mass evolution for different halo mass and redshift bins
     
     Args:
@@ -187,6 +188,73 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
         numpy.ndarray: Black Hole mass growth in redshift and descendant halo mass bins
         shape (len(Mh0),len(zn))
     """
+    #parameters
+    Mseed = parameters.source.M_seed
+    f0 = parameters.source.f0
+    p = parameters.source.p_merge
+    xi = parameters.source.xi
+    if isinstance(Mh0,np.ndarray):
+        f0s,Mseeds,ps,xis = get_scattered_parameters(parameters,Mh0.size)
+    elif isinstance(Mh0,list):
+        f0s,Mseeds,ps,xis = get_scattered_parameters(parameters,len(Mh0))
+    else:
+        f0s,Mseeds,ps,xis = get_scattered_parameters(parameters,1)
+    
+    #print("mseeds:",Mseeds)
+    Mh = np.sort(Mh0)
+    Mh = Mh[::-1]
+
+    #solve seeding equation for every halo
+    
+    z_seeds = np.array([z_seed(Mh[i],Mseeds[i],parameters) for i in range(len(Mh))])
+    Dz = np.abs(zn[1]-zn[0])
+    
+    #initiate array
+    M_BH = np.zeros((len(Mh),len(zn)))
+    M_BH_dot = np.zeros((len(Mh),len(zn)))
+    #print(z_seeds)
+    #seeding 
+    
+    for i,zseed in enumerate(z_seeds):
+        index = np.digitize(zseed,zn)
+        if index != len(zn):
+            #print(i,index)
+            M_BH[i][index] = Mseeds[i]
+    #loop = time()
+    #print(M_BH)
+    #loop through z bins
+    for n in range(1,len(zn)):
+        #loop through M bins
+        M_BH[:,n] += M_BH[:,n-1]
+
+        #eddington accretion from the previous z bin
+        delta_M = A*duty_cycle(M_BH[:,n-1],f0s[:],0)*M_BH[:,n-1]*dtdz(zn[n],parameters)
+        
+        for l in range(len(Mh)-1,-1,-1):
+            
+            #mergers from smaller mass halos
+            for i in range(len(Mh)-1,l,-1):
+                delta_M[l] +=  np.abs((Mh[i]-Mh[i-1]))/Mh[l]*dN_dzdMp(Mh[l],Mh[i],zn[n]) * M_BH[i][n] * p_merge(Mh[l],Mh[i],xis[l],ps[l])
+        
+            #add them times the redshift step
+            M_BH[l,n] += delta_M[l] * Dz
+            M_BH_dot[l,n] += delta_M[l] * dzdt(zn[n],parameters)
+        
+    #print(time()-loop,"loop time")
+    return M_BH,M_BH_dot,Mh
+#original slow
+"""def black_hole_mass_iterative(zn,Mh0,parameters):
+    #NOW WITH SCATTER
+    Compute the black hole mass evolution for different halo mass and redshift bins
+    
+    Args:
+        zn (np.ndarray): redshift bins
+        Mh0 (np.ndarray): descendent halo masses
+
+    Returns:
+        numpy.ndarray: Black Hole mass growth in redshift and descendant halo mass bins
+        shape (len(Mh0),len(zn))
+    
     #parameters
     Mseed = parameters.source.M_seed
     f0 = parameters.source.f0
@@ -243,7 +311,7 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
             M_BH_dot[l][n] += delta_M * dzdt(zn[n],parameters)
 
     return M_BH,M_BH_dot,Mh
-
+"""
 
 def eps_xray_BH(nu_, parameters: Parameters,Mdot_BH,type):
     """Spectral distribution of X-ray emission per unit BH accretion.

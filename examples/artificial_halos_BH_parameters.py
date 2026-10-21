@@ -139,7 +139,7 @@ loader = beorn.load_input_data.ArtificialHaloLoader(
     halo_count = 100,
 )
 recompute = False
-print(loader.redshifts)
+#print(loader.redshifts)
 
 def compute_no_BH_z_quantities(parameters,redshifts):
     print("computing no BH signal")
@@ -474,7 +474,7 @@ def plot_BHMF_para(params,target_redshift):
     plt.show()
 
 def compute_MBH_MSTAR(params):
-    M   = np.logspace(8, 15, 50) 
+    M   = np.logspace(8, 15, 25) 
     halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
     M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
     
@@ -482,17 +482,18 @@ def compute_MBH_MSTAR(params):
 
     M_star = (Ob / Om) * f_star_Halo(parameters, halo_mass) * halo_mass
     i_target = np.where(loader.redshifts == 7.5)
-    i2_target = np.where(loader.redshifts == 9.0)
+    #i2_target = np.where(loader.redshifts == 9.0)
     M_BH = np.flip(M_BH,0)
     M_BH_dot = np.flip(M_BH_dot,0)
     return M_star[:,0,i_target],M_BH[:,i_target]
 
 def plot_MBH_Mstar(params,z):
-    M   = np.logspace(8, 15, 50)
-    start=time()
+    M   = np.logspace(8, 15, 25)
+    
     halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
+    start=time()
     M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
-    print(time()-start)
+    #print(time()-start)
     Ob,Om = parameters.cosmology.Ob,parameters.cosmology.Om
 
     M_star = (Ob / Om) * f_star_Halo(parameters, halo_mass) * halo_mass
@@ -570,18 +571,19 @@ def parameters_from(theta,parameters):
     parameters.source.xi = theta[3]
     return parameters
 
-def log_likelyhood(theta,M_BH_obs,M_star_obs,sigma_y,parameters):
+def log_likelyhood(theta,M_star_obs,M_BH_obs,sigma_y,parameters):
     prior = log_prior(theta)
     if not np.isfinite(prior):
         return -np.inf
     parameters = parameters_from(theta,parameters)
     #returns calculated MBH and MSTAR at redshift 7.5 for every halo
-    M_BH,M_star = compute_MBH_MSTAR(parameters)
+    M_star,M_BH = compute_MBH_MSTAR(parameters)
     M_star,M_BH = M_star.squeeze(),M_BH.squeeze()
-    
+
     f = interp1d(M_star,M_BH,kind="linear",
-                 bounds_error=False)
+                 bounds_error=False,fill_value="extrapolate")
     M_BH_sim = f(M_star_obs)
+    
     return prior-0.5 * np.sum(((M_BH_obs-M_BH_sim)/sigma_y)**2)
                             
 
@@ -589,13 +591,13 @@ def mcmc(parameters):
     #get jwst data
     d = pd.read_csv(r"C:\Users\nick\Code\Thesis26\BEoRN\examples\mbh_mstar_6z9_digitized.csv", comment="#")
     s = d[d.dataset == "JWST_AGN"]
-    M_star_obs,M_BH_obs = s.log_mstar, s.log_mbh
+    M_star_obs,M_BH_obs = 10**s.log_mstar, 10**s.log_mbh
     sigma_x,sigma_y = np.full_like(M_BH_obs,1.0),np.full_like(M_BH_obs,1.0)
     #try to do mcmc on jwst data
     import emcee
     ndim = 4
     nwalkers = 32
-    p0 = np.array([1.0,900,1.0,0.0])+1e-3 * np.random.randn(nwalkers,ndim)
+    p0 = np.array([0.8,800,0.8,0.2])+1e-3 * np.random.randn(nwalkers,ndim)
     from multiprocessing import Pool
     with Pool() as pool:
         sampler = emcee.EnsembleSampler(nwalkers,ndim,log_likelyhood,args=(M_star_obs,M_BH_obs,sigma_y,parameters),pool=pool)
@@ -708,7 +710,7 @@ if __name__ == "__main__":
     #plt.show()
     
     #plot_BHMF_para([0.0,0.1,0.3,0.5,0.7],17)
-    parameters= parameters_from([0.5,533,0.5,0.5],parameters)
+    parameters= parameters_from([0.49,534,0.398,0.507],parameters)
     claude_plot()
     
     
