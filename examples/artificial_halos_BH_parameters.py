@@ -72,7 +72,7 @@ parameters.simulation.cores = 4
 
 parameters.solver.halo_mass_bin_min = 1e8
 parameters.solver.halo_mass_bin_max = 1e15
-parameters.solver.halo_mass_nbin = 200
+parameters.solver.halo_mass_nbin = 201
 parameters.solver.halo_mass_accretion_alpha = np.array([0.785, 0.795])
 parameters.simulation.Lbox = 100
 parameters.simulation.Ncell = 128
@@ -98,7 +98,7 @@ parameters.source.f0_esc = 0.2
 parameters.source.pl_esc = 0
 
 # fstar
-parameters.source.f_st = 0.5
+parameters.source.f_st = 0.05
 parameters.source.g1 = 0.49
 parameters.source.g2 = -0.61
 parameters.source.g3 = 1.4
@@ -408,21 +408,23 @@ def plot_BHMF_z(redshifts,parameters):
 
         n   = hmf.dndlnm(halo_mass[:,0,i_target], z=target_redshift)
         #n_BH = np.full_like(n,0)
-        mask = np.where(M_BH_dot[:,i_target] > 0.0)
+        mask = np.where(M_BH_dot[:,i_target] >= 0.0)
         n_BH[i,mask,0] = n[mask,0]*halo_mass_derivative[mask,0,i_target] / M_BH_dot[mask,i_target]  / halo_mass[mask,0,i_target] * M_BH[mask,i_target] 
-        if n_BH[i,0,0] == np.inf:
-            n_BH[i,0,0] = 0
+        for j in range(len(M_BH_dot[:,0])):
+            if n_BH[i,j,0] == np.inf:
+                n_BH[i,j,0] = np.nan
         #n_BH = n* M_BH[:,i_target]
         #print(Mh)
         #print(M_BH[:,i_target],n_BH[i])
-        #plt.plot(M_BH[:,i_target],n_BH[i],label=f"z={target_redshift}",linestyle=ls)
+        print(n_BH[i,1,0])
+        plt.plot(M_BH[:,i_target],n_BH[i],label=f"z={target_redshift}")
         #plt.plot(halo_mass[:,0,i_target],n,label=f"z={target_redshift}")
         #plt.plot(halo_mass[:,0,i_target],n,label=f"halo mass at {target_redshift}")
         """plt.scatter(M_BH[mask,i_target],n_BH[i,mask,0])#M_BH[mask,i_target]*M_BH_dot[mask,i_target])
         plt.yscale("log")
         plt.xscale("log")
         plt.show()"""
-    """plt.xlim(1e1,1e9)
+    plt.xlim(1e1,1e9)
     plt.ylim(1e-6,1e2)
     #plt.xlim(1e1,1e10)
     plt.legend()
@@ -431,14 +433,14 @@ def plot_BHMF_z(redshifts,parameters):
     plt.xlabel(r"$M_\odot$")
     plt.ylabel(r"$\frac{dn_{BH}}{dlnM_{BH}}$")
     plt.title(f"BHMF for f0={parameters.source.f0}, Mseed={parameters.source.M_seed}, p={parameters.source.p_merge}, xi={parameters.source.xi}")
-""" 
+
     
     return n_BH,M_BH[:,i_target].squeeze()
 
 def plot_BHMF_para(params,target_redshift):
     M   = np.logspace(8, 15, 60)
-    halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
-    hmf = HaloMassFunction(parameters,"sheth_tormen")
+    halo_mass,halo_mass_derivative = mass_accretion(params,loader.redshifts,M,np.array([0.79]))
+    hmf = HaloMassFunction(params,"sheth_tormen")
 
     i_target = np.where(loader.redshifts==target_redshift)[0]
 
@@ -446,8 +448,8 @@ def plot_BHMF_para(params,target_redshift):
     
     for para in params:
         #change this
-        parameters.source.xi = para
-        M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
+        params.source.xi = para
+        M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,params)
         M_BH = np.flip(M_BH,0)
         M_BH_dot = np.flip(M_BH_dot,0)
 
@@ -470,17 +472,17 @@ def plot_BHMF_para(params,target_redshift):
     plt.xlabel(r"$M_\odot$")
     plt.ylabel(r"$\frac{dn_{BH}}{dlnM_{BH}}$")
     #change title
-    plt.title(f"BHMF for z={target_redshift}, p={parameters.source.p_merge}, f0={parameters.source.f0}, Mseed={parameters.source.M_seed}")
+    plt.title(f"BHMF for z={target_redshift}, p={params.source.p_merge}, f0={params.source.f0}, Mseed={params.source.M_seed}")
     plt.show()
 
 def compute_MBH_MSTAR(params):
     M   = np.logspace(8, 15, 25) 
-    halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
-    M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
+    halo_mass,halo_mass_derivative = mass_accretion(params,loader.redshifts,M,np.array([0.79]))
+    M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,params)
     
-    Ob,Om = parameters.cosmology.Ob,parameters.cosmology.Om
+    Ob,Om = params.cosmology.Ob,params.cosmology.Om
 
-    M_star = (Ob / Om) * f_star_Halo(parameters, halo_mass) * halo_mass
+    M_star = (Ob / Om) * f_star_Halo(params, halo_mass) * halo_mass
     i_target = np.where(loader.redshifts == 7.5)
     #i2_target = np.where(loader.redshifts == 9.0)
     M_BH = np.flip(M_BH,0)
@@ -490,22 +492,24 @@ def compute_MBH_MSTAR(params):
 def plot_MBH_Mstar(params,z):
     M   = np.logspace(8, 15, 25)
     
-    halo_mass,halo_mass_derivative = mass_accretion(parameters,loader.redshifts,M,np.array([0.79]))
+    halo_mass,halo_mass_derivative = mass_accretion(params,loader.redshifts,M,np.array([0.79]))
     start=time()
-    M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,parameters)
+    M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,M,params)
     #print(time()-start)
-    Ob,Om = parameters.cosmology.Ob,parameters.cosmology.Om
+    Ob,Om = params.cosmology.Ob,params.cosmology.Om
 
-    M_star = (Ob / Om) * f_star_Halo(parameters, halo_mass) * halo_mass
+    M_star = (Ob / Om) * f_star_Halo(params, halo_mass) * halo_mass
     i_target = np.where(loader.redshifts == z)
     i2_target = np.where(loader.redshifts == z+3)
+    i3_target = np.where(loader.redshifts == z+1.5)
     M_BH = np.flip(M_BH,0)
     M_BH_dot = np.flip(M_BH_dot,0)
     #plt.scatter(np.log10(M_star[:,0,i2_target]),np.log10(M_BH[:,i2_target]),color="red",label="Nick")
 
     f_inter = interp1d(M_star[:,0,i2_target].squeeze(),M_BH[:,i2_target].squeeze(),kind="cubic", fill_value="extrapolate")
-    plt.fill_between(np.log10(M_star[:,0,i_target].squeeze()), np.log10(M_BH[:,i_target].squeeze()), np.log10(f_inter(M_star[:,0,i_target].squeeze())), alpha=0.3,label="my code z=9-12")
-    plt.title(f"BHMF for f0={parameters.source.f0}, Mseed={parameters.source.M_seed}, p={parameters.source.p_merge}, xi={parameters.source.xi}")
+    plt.fill_between(np.log10(M_star[:,0,i_target].squeeze()), np.log10(M_BH[:,i_target].squeeze()), np.log10(f_inter(M_star[:,0,i_target].squeeze())), alpha=0.3,label=f"simulation (z={z}-{z+3})",color="red")
+    plt.title(f"f0={params.source.f0:.2f}, Mseed={params.source.M_seed:.1f}, p={params.source.p_merge:.2f}, xi={params.source.xi:.2f}")
+    plt.plot(np.log10(M_star[:,0,i_target].squeeze()), np.log10(M_BH[:,i_target].squeeze()),label=f"simulation(z={z})",color="red")
     #print(np.log10(M_BH[:,i_target].squeeze()), y_z9_on_x6,np.log10(M_star[:,0,i2_target].squeeze()))
     
 BH_params = {
@@ -515,7 +519,7 @@ BH_params = {
     "xi": []
 }
 
-def claude_plot():
+def claude_plot(parameters):
     
     
     
@@ -523,13 +527,12 @@ def claude_plot():
     
     fig, ax = plt.subplots(figsize=(5.5, 5.5))
     x = np.linspace(6, 12, 50)
-    ax.plot(x, 8.69 + 1.17 * (x - 11), "k-", lw=1, label="Kormendy & Ho (2013)")
-    ax.plot(x, 7.45 + 1.05 * (x - 11), "k--", lw=1, label="Reines & Volonteri (2015)")
-    for off in (0, 1, 2):  # M_BH/M_* = 1, 0.1, 0.01
-        ax.plot(x, x - off, ":", c="darkred", lw=1)
+    #ax.plot(x, 8.69 + 1.17 * (x - 11), "k-", lw=1, label="Kormendy & Ho (2013)")
+    #ax.plot(x, 7.45 + 1.05 * (x - 11), "k--", lw=1, label="Reines & Volonteri (2015)")
+    #for off in (0, 1, 2):  # M_BH/M_* = 1, 0.1, 0.01
+        #ax.plot(x, x - off, ":", c="darkred", lw=1)
     
     for name, c, lab in [("THESAN-ZOOM", "k", "THESAN-ZOOM"),
-                        ("TNG50_z0", "#221efc", "TNG50 (z=0)"),
                         ("TNG50_z3", "#4b91fd", "TNG50 (z=3)")]:
         s = d[d.dataset == name]
         ax.plot(s.log_mstar, s.log_mbh, c=c, lw=2.5, label=lab)
@@ -559,8 +562,8 @@ def claude_plot():
     plt.show()
 
 def log_prior(theta):
-    f0,Mseed,p,xi = theta
-    if 0<f0<1 and 50< Mseed <1000 and 0<p<1 and 0<xi<1:
+    f0,Mseed,p,xi= theta#,f0_sig,Mseed_sig,p_sig,xi_sig = theta
+    if 0<f0<2 and 50< Mseed <2000 and 0<p<1 and 0<xi<1:#and 0<= f0_sig <0.2 and 0<= Mseed_sig<200 and 0.0 <=p_sig<0.3 and 0<= xi_sig < 0.3:
         return 0.0
     return -np.inf
 
@@ -569,9 +572,13 @@ def parameters_from(theta,parameters):
     parameters.source.M_seed = theta[1]
     parameters.source.p_merge = theta[2]
     parameters.source.xi = theta[3]
+    """parameters.source.f0_sig = theta[4]
+    parameters.source.M_seed_sig = theta[5]
+    parameters.source.p_merge_sig = theta[6]
+    parameters.source.xi_sig = theta[7]"""
     return parameters
 
-def log_likelyhood(theta,M_star_obs,M_BH_obs,sigma_y,parameters):
+def log_likelyhood(theta,M_star_obs,M_BH_obs,sigma_x,sigma_y,parameters):
     prior = log_prior(theta)
     if not np.isfinite(prior):
         return -np.inf
@@ -580,11 +587,13 @@ def log_likelyhood(theta,M_star_obs,M_BH_obs,sigma_y,parameters):
     M_star,M_BH = compute_MBH_MSTAR(parameters)
     M_star,M_BH = M_star.squeeze(),M_BH.squeeze()
 
-    f = interp1d(M_star,M_BH,kind="linear",
+    f_BH = interp1d(M_star,M_BH,kind="linear",
                  bounds_error=False,fill_value="extrapolate")
-    M_BH_sim = f(M_star_obs)
-    
-    return prior-0.5 * np.sum(((M_BH_obs-M_BH_sim)/sigma_y)**2)
+    f_Mstar = interp1d(M_BH,M_star,kind="linear",
+                 bounds_error=False,fill_value="extrapolate")
+    M_BH_sim = f_BH(M_star_obs)
+    M_star_sim = f_Mstar(M_BH_obs)
+    return prior-0.5 * np.sum(((M_BH_obs-M_BH_sim)/sigma_y)**2+((M_star_obs-M_star_sim)/sigma_x)**2)
                             
 
 def mcmc(parameters):
@@ -597,10 +606,12 @@ def mcmc(parameters):
     import emcee
     ndim = 4
     nwalkers = 32
-    p0 = np.array([0.8,800,0.8,0.2])+1e-3 * np.random.randn(nwalkers,ndim)
+    center = np.array([0.8,800,0.8,0.2])
+    spread= np.array([0.1,100,0.1,0.1])
+    p0 = center+spread* np.random.randn(nwalkers,ndim)
     from multiprocessing import Pool
     with Pool() as pool:
-        sampler = emcee.EnsembleSampler(nwalkers,ndim,log_likelyhood,args=(M_star_obs,M_BH_obs,sigma_y,parameters),pool=pool)
+        sampler = emcee.EnsembleSampler(nwalkers,ndim,log_likelyhood,args=(M_star_obs,M_BH_obs,sigma_x,sigma_y,parameters),pool=pool)
         sampler.run_mcmc(p0,5000,progress=True)
 
     tau = sampler.get_autocorr_time(tol=0)
@@ -609,7 +620,7 @@ def mcmc(parameters):
     print(samples)
 
     #claude
-    labels = ["f0", "Mseed", "p","xi"] 
+    labels = ["f0", "Mseed", "p","xi"]#"f0_sig","Mseed_sig","p_sig","xi_sig"] 
     chain = sampler.get_chain()              # shape (steps, walkers, ndim)
     fig, axes = plt.subplots(len(labels), 1, sharex=True, figsize=(8, 2*len(labels)))
     for i, ax in enumerate(axes):
@@ -625,10 +636,12 @@ def mcmc(parameters):
     corner.corner(samples, labels=labels, quantiles=[0.16, 0.5, 0.84],
                 show_titles=True, title_fmt=".3f")
 
+    theta_pred = []
     # 4. Parameter estimates: median with 68% interval
     for i, name in enumerate(labels):
         lo, med, hi = np.percentile(samples[:, i], [16, 50, 84])
         print(f"{name} = {med:.4f} +{hi-med:.4f} -{med-lo:.4f}")
+        theta_pred.append(med)
 
     # 5. Posterior predictive check: model curves from random posterior draws over the data
     plt.figure()
@@ -641,6 +654,9 @@ def mcmc(parameters):
     plt.errorbar(M_star_obs, M_BH_obs, yerr=sigma_y, fmt="o", color="k")
     plt.xlabel("x"); plt.ylabel("y")
     plt.show()
+
+    parameters= parameters_from(theta_pred,parameters)
+    claude_plot(parameters)
 
 if __name__ == "__main__":
 
@@ -708,10 +724,25 @@ if __name__ == "__main__":
 
     #plt.title(f"BHMF for f0={parameters.source.f0}, Mseed={parameters.source.M_seed}, p={parameters.source.p_merge}, xi={parameters.source.xi} and f0 scatter {0.05}")
     #plt.show()
-    
+    print(loader.redshifts)
     #plot_BHMF_para([0.0,0.1,0.3,0.5,0.7],17)
-    parameters= parameters_from([0.49,534,0.398,0.507],parameters)
-    claude_plot()
+    claude_plot(parameters_from([1.0,100,0.5,0.3],parameters))
+    plot_BHMF_z([6.0,9.0,12.0,15.0,18.0],parameters_from([1.0,100,0.5,0.3],parameters))
+    plt.show()
+    Mh0 = np.logspace(8,15,50)
+
+    halo_mass, halo_mass_derivative = mass_accretion(parameters,loader.redshifts,Mh0,np.array([0.79]))
+    M_BH,M_BH_dot,Mh = black_hole_mass_iterative(loader.redshifts,Mh0,parameters)
+    print(halo_mass_derivative)
+    plt.plot(loader.redshifts,halo_mass_derivative[0][0])
+    plt.plot(loader.redshifts,M_BH_dot[-1])
+    plt.yscale("log")
+    plt.show()
+
+
+
+
+    
     
     
 

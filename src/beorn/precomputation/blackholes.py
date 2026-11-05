@@ -10,6 +10,7 @@ from scipy.optimize import brentq
 from scipy.integrate import quad,cumulative_trapezoid,trapezoid
 import matplotlib.pyplot as plt
 from time import time
+from random import random
 
 #seed random
 rng = np.random.default_rng(seed=0)
@@ -39,6 +40,13 @@ def t_to_z(ts,parameters):
     if not isinstance(ts,np.ndarray):
         return brentq(lambda z: z_to_t(z,parameters)-ts, -1, 3000)
     return np.array([brentq(lambda z: z_to_t(z,parameters)-t, -1, 3000) for t in ts])
+
+def cosmic_time(z, parameters):
+    """Age of the universe at redshift z in yr (flat LCDM, no radiation). Works on arrays."""
+    Om = parameters.cosmology.Om
+    OL = parameters.cosmology.Ol
+    H0_yr = 100.0*parameters.cosmology.h0 / 977.8e9          # km/s/Mpc -> 1/yr
+    return 2 / (3 * H0_yr * np.sqrt(OL)) * np.arcsinh(np.sqrt(OL / Om) * (1 + z)**-1.5)
 
 
 #Seeding mechanism
@@ -75,13 +83,16 @@ def z_seed(M0,M_seed,parameters):
         return 5
     return z_seed_solution
 
-def dN_dzdMp(Mh,Mp,z):
+def dN_dzdxi(Mh,xi,z):
     #Compute the number of mergers per unit redshift and per unit progenitor mass
     #TODO put these constants in Parameters
     alpha,beta,gamma,eta = 0.133,-1.995,0.263,0.0993
-    A,xi_ = 0.0104,9.72e-3
+    A_,xi_ = 0.0104,9.72e-3
     
-    return A*(Mh/1e12)**alpha*(Mp/Mh)**beta*np.exp((Mp/(Mh*xi_))**gamma)*(1+z)**eta #fakhouri 2010
+    return A_*(Mh/1e12)**alpha*(xi)**beta*np.exp((xi/xi_)**gamma)*(1+z)**eta #fakhouri 2010
+    #return A_*(Mh/1e12)**alpha*(Mp/Mh)**beta*np.exp((Mp/(Mh*xi_))**gamma)*(1+z)**eta #fakhouri 2010
+    
+
 
 def p_merge(Mh,Mp,xi,p):
     """Model Black hole mergers
@@ -203,15 +214,24 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
     #print("mseeds:",Mseeds)
     Mh = np.sort(Mh0)
     Mh = Mh[::-1]
+    #get this outside of the BH function once instead of every 
+    halo_mass = mass_accretion(parameters,zn,Mh,np.array([0.5]))[0]
 
     #solve seeding equation for every halo
     
     z_seeds = np.array([z_seed(Mh[i],Mseeds[i],parameters) for i in range(len(Mh))])
     Dz = np.abs(zn[1]-zn[0])
+
+    tn = cosmic_time(zn, parameters)
     
     #initiate array
     M_BH = np.zeros((len(Mh),len(zn)))
+    #print(M_BH.dtype)
     M_BH_dot = np.zeros((len(Mh),len(zn)))
+    M_mergers = np.zeros((len(Mh),len(zn)))
+    M_h = np.zeros((len(Mh),len(zn)))
+    M_h[:,0]= halo_mass[:,0,0]
+    #print(halo_mass[0,0,0])
     #print(z_seeds)
     #seeding 
     
@@ -222,26 +242,70 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
             M_BH[i][index] = Mseeds[i]
     #loop = time()
     #print(M_BH)
+    merged = np.full((len(Mh),len(Mh)),False)
     #loop through z bins
     for n in range(1,len(zn)):
         #loop through M bins
         M_BH[:,n] += M_BH[:,n-1]
+        M_h[:,n] += M_h[:,n-1]
 
         #eddington accretion from the previous z bin
-        delta_M = A*duty_cycle(M_BH[:,n-1],f0s[:],0)*M_BH[:,n-1]*dtdz(zn[n],parameters)
-        
+        #delta_M = A*duty_cycle(M_BH[:,n-1],f0s[:],0)*M_BH[:,n-1]*dtdz(zn[n],parameters)
+        delta_M = M_BH[:,n-1] * (np.exp(A*duty_cycle(M_BH[:,n-1],f0s[:],0)*(tn[n]-tn[n-1])) - 1)
+        mergers = np.zeros_like(delta_M)
+        halo_mergers = np.zeros_like(delta_M)
+
         for l in range(len(Mh)-1,-1,-1):
             
             #mergers from smaller mass halos
             for i in range(len(Mh)-1,l,-1):
-                delta_M[l] +=  np.abs((Mh[i]-Mh[i-1]))/Mh[l]*dN_dzdMp(Mh[l],Mh[i],zn[n]) * M_BH[i][n] * p_merge(Mh[l],Mh[i],xis[l],ps[l])
-        
+                if not merged[l][i]: #and random() < ps[l]:
+                    #merger =  np.abs((Mh[i]-Mh[i-1]))/(Mh[l])*dN_dzdxi((Mh[l]+Mh[i]),Mh[i]/Mh[l],zn[n]) * M_BH[i][n] * p_merge(Mh[l],Mh[i],xis[l],ps[l])
+                    #merger =  np.abs((Mh[i]-Mh[i-1]))/(Mh[l])*dN_dzdxi((Mh[l]),Mh[i]/Mh[l],zn[n]) * M_BH[i][n] * p_merge(Mh[l],Mh[i],xis[l],ps[l])                     
+                    merger =  np.abs((halo_mass[i,0,n]-halo_mass[i-1,0,n]))/halo_mass[l,0,n]*dN_dzdxi(halo_mass[l,0,n]+halo_mass[i,0,n],halo_mass[i,0,n]/halo_mass[l,0,n],zn[n]) * M_BH[i][n] * p_merge(halo_mass[l,0,n],halo_mass[i,0,n],xis[l],ps[l])
+                    
+                    #halo_merger = np.abs((Mh[i]-Mh[i-1]))/Mh[l]*dN_dzdxi(Mh[l]+Mh[i],Mh[i]/Mh[l],zn[n]) * M_h[i][n]
+                    halo_merger = np.abs((halo_mass[i,0,n]-halo_mass[i-1,0,n]))/halo_mass[l,0,n]*dN_dzdxi(halo_mass[l,0,n]+halo_mass[i,0,n],halo_mass[i,0,n]/halo_mass[l,0,n],zn[n]) * halo_mass[i,0,n]
+                    #halo_merger = np.abs(M_h[i,n]-M_h[i-1,n])/M_h[l,n-1]*dN_dzdxi(M_h[l,n]+M_h[i,n],M_h[i,n]/M_h[l,n],zn[n]) * M_h[i,n]
+
+                    halo_mergers[l] += halo_merger
+                    delta_M[l] += merger * dzdt(zn[n],parameters) * (tn[n]-tn[n-1])
+                    mergers[l] += merger * dzdt(zn[n],parameters) * (tn[n]-tn[n-1])
+                    if merger > 0.0:
+                        merged[l][i] = False
+                
             #add them times the redshift step
-            M_BH[l,n] += delta_M[l] * Dz
-            M_BH_dot[l,n] += delta_M[l] * dzdt(zn[n],parameters)
-        
+            #M_BH[l,n] += delta_M[l] * (zn[n-1]-zn[n])
+            M_BH[l,n] += delta_M[l] 
+            #print(M_BH[l,n])
+            #M_h[l,n] += halo_mergers[l]* (zn[n-1]-zn[n])
+            M_h[l,n] += halo_mergers[l]
+        """for l in range(len(Mh)-1,-1,-1):
+                    
+            #mergers from smaller mass halos
+            for i in range(n-1,n-2,-1):
+                if not merged[l][i]: #and random() < ps[l]:
+                    #merger =  np.abs((Mh[i]-Mh[i-1]))/(Mh[l])*dN_dzdxi((Mh[l]+Mh[i]),Mh[i]/Mh[l],zn[n]) * M_BH[i][n] * p_merge(Mh[l],Mh[i],xis[l],ps[l])
+                    #merger =  np.abs((Mh[i]-Mh[i-1]))/(Mh[l])*dN_dzdxi((Mh[l]),Mh[i]/Mh[l],zn[n]) * M_BH[i][n] * p_merge(Mh[l],Mh[i],xis[l],ps[l])                     
+                    merger =  np.abs((halo_mass[l,0,i]-halo_mass[l,0,i-1]))/halo_mass[l,0,n]*dN_dzdxi(halo_mass[l,0,n]+halo_mass[l,0,i],halo_mass[l,0,i]/halo_mass[l,0,n],zn[n]) * M_BH[l][i] * p_merge(halo_mass[l,0,n],halo_mass[l,0,i],xis[l],ps[l])
+                    
+                    #halo_merger = np.abs((Mh[i]-Mh[i-1]))/Mh[l]*dN_dzdxi(Mh[l]+Mh[i],Mh[i]/Mh[l],zn[n]) * M_h[i][n]
+                    #halo_merger = np.abs((halo_mass[i,0,n]-halo_mass[i-1,0,n]))/halo_mass[l,0,n]*dN_dzdxi(halo_mass[l,0,n]+halo_mass[i,0,n],halo_mass[i,0,n]/halo_mass[l,0,n],zn[n]) * halo_mass[i,0,n]
+                    #halo_merger = np.abs(M_h[i,n]-M_h[i-1,n])/M_h[l,n-1]*dN_dzdxi(M_h[l,n]+M_h[i,n],M_h[i,n]/M_h[l,n],zn[n]) * M_h[i,n]
+
+                    #halo_mergers[l] += halo_merger
+                    delta_M[l] += merger
+                    mergers[l] += merger
+                    if merger > 0.0:
+                        merged[l][i] = False
+                
+            #add them times the redshift step
+            M_BH[l,n] += delta_M[l] * (zn[n-1]-zn[n])
+            M_h[l,n] += halo_mergers[l]* (zn[n-1]-zn[n])"""
+        M_BH_dot[:,n] += delta_M * dzdt(zn[n],parameters)
+        M_mergers[:,n] += mergers * dzdt(zn[n],parameters)
     #print(time()-loop,"loop time")
-    return M_BH,M_BH_dot,Mh
+    return M_BH,M_BH_dot,M_h
 #original slow
 """def black_hole_mass_iterative(zn,Mh0,parameters):
     #NOW WITH SCATTER
@@ -346,9 +410,9 @@ def eps_xray_BH(nu_, parameters: Parameters,Mdot_BH,type):
     
     if type == "HMXB":
         #normalize for each redshift
-        A = 1.0/trapezoid(nu_**(-al_HMXB),nu_,axis=0)
+        Norm = 1.0/trapezoid(nu_**(-al_HMXB),nu_,axis=0)
         #print(A*f_X*c_X/(h_eV_sec*nu_) * nu_**(-al_HMXB) * eV_per_erg)
-        return A*f_X*c_X/(h_eV_sec*nu_) * nu_**(-al_HMXB) * eV_per_erg #[photons/Hz/s /(yr/Msun)]
+        return Norm*f_X*c_X/(h_eV_sec*nu_) * nu_**(-al_HMXB) * eV_per_erg #[photons/Hz/s /(yr/Msun)]
     elif type == "IMBH":
         L_bol = e_r*Mdot_BH*3e8**2
         K_X = np.full_like(L_bol,1.0)
@@ -358,6 +422,6 @@ def eps_xray_BH(nu_, parameters: Parameters,Mdot_BH,type):
         
         psi = obsc_fraction(L_X)
         #normalize for each redshift
-        A = 1.0/trapezoid(nu_**(-al_IMBH),nu_,axis=0)
+        Norm = 1.0/trapezoid(nu_**(-al_IMBH),nu_,axis=0)
         #print((e_r*3e10**2)/(K_X * h_eV_sec/eV_per_erg * nu_) * (1-psi) * A * nu_**(-al_IMBH) * 6.3e25)
-        return (e_r*3e10**2)/(K_X * h_eV_sec/eV_per_erg * nu_) * (1-psi) * A * nu_**(-al_IMBH) * 6.3e25
+        return (e_r*3e10**2)/(K_X * h_eV_sec/eV_per_erg * nu_) * (1-psi) * Norm * nu_**(-al_IMBH) * 6.3e25

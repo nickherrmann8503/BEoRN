@@ -440,6 +440,7 @@ class RadiationProfileSolver:
             
             Mh_0s = np.logspace(np.log10(self.parameters.source.descendant_halo_mass_min),np.log10(Mh_0[0]),self.parameters.source.N_descendant_halo_mass_bins)
         #print("Mh-0s",Mh_0s)
+        #TODO Give Mh evolution directly
         M_BH,M_BH_dot,Mh = black_hole_mass_iterative(self.z_bins,Mh_0s,self.parameters)
         M_BH_dot = np.array([[M_BH_dot[0]]])
         """#print(M_star_dot.shape,M_BH_dot.shape)
