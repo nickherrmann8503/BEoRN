@@ -159,7 +159,7 @@ def compute_merger_tree(descendant_halo_mass,z_max,z0):
 def compute_merger_tree_and_BH(descendant_halo_mass,z_max,z0,f0,p,xi):
      #where f0 is eddington fraction and p is the merger probability
 
-    Mtree_sim = merger_trees.MergerTree(descendant_halo_mass,z0,z_max,np.max([descendant_halo_mass*1e-5,100000.0]))
+    Mtree_sim = merger_trees.MergerTree(descendant_halo_mass,z0,z_max,np.max([descendant_halo_mass*1e-5,1000000.0]))
     Mtree_sim.run(verbose=False)
     z_tree = np.array(Mtree_sim.main_branch_history['redshift'].tolist())
     Mh_tree = np.array(Mtree_sim.main_branch_history['mass_msun'].tolist()) 
@@ -215,7 +215,7 @@ def Black_hole_history(history,f0,p):
 def plot_merger_tree(whole_history,ax, main_progenitor):
     if main_progenitor:
         m = whole_history[1] >0.0
-        ax.plot(whole_history[0][m], whole_history[1][m], lw=1.5, label=f'Main Progenitor')
+        ax.plot(whole_history[0][m], whole_history[1][m], lw=1.5, label=f'Main Progenitor',color='blue')
     else:
         m = whole_history[1] >0.0
         ax.plot(whole_history[0][m], whole_history[1][m], lw=1.5,ls="--")
@@ -249,10 +249,10 @@ plot_trees(trees, Mh_0, zn)"""
 
 
 zn = np.linspace(25,5,41)
-target_halo_mass = 1e9
-f0 = 0.1
+target_halo_mass = 1e11
+f0 = 0.2
 p= 0.5
-xi = 0.1
+xi = 0.01
 start_time = time()
 hist = compute_merger_tree_and_BH(target_halo_mass,25,zn[-1],f0,p,xi)
 print("Time taken to compute merger tree and BH history:", (time() - start_time) / 60, "minutes")
@@ -271,9 +271,10 @@ plot_merger_tree(hist[1],ax[1], main_progenitor=True)
 parameters.source.f0 = f0
 parameters.source.p_merge = p
 parameters.source.xi = xi
-MBH,MBHdot,Mh_fakhouri = black_hole_mass_iterative(zn,np.array([target_halo_mass,target_halo_mass*0.1,target_halo_mass*0.01]),parameters)
+Mh_0s = np.logspace(9,13,21)
+MBH,MBHdot,Mh_fakhouri = black_hole_mass_iterative(zn,Mh_0s,parameters)
 
-ax[1].plot(zn,MBH[0,:],label="previous")
+ax[1].plot(zn,MBH[0,:],label="previous",color='red')
 ax[0].legend()
 ax[1].legend()
 ax[0].set_xlabel('Redshift')

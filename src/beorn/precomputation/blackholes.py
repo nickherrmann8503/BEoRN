@@ -235,11 +235,17 @@ def black_hole_mass_iterative(zn,Mh0,parameters):
     #print(z_seeds)
     #seeding 
     
-    for i,zseed in enumerate(z_seeds):
+    """for i,zseed in enumerate(z_seeds):
         index = np.digitize(zseed,zn)
         if index != len(zn):
             #print(i,index)
-            M_BH[i][index] = Mseeds[i]
+            M_BH[i][index] = Mseeds[i]"""
+    #similar seeding to dayal
+    for i in range(len(Mh)):
+        idx = np.argmax(halo_mass[i,0,:] > 1e5)
+        M_BH[i,idx] = Mseeds[i]
+
+
     #loop = time()
     #print(M_BH)
     merged = np.full((len(Mh),len(Mh)),False)
